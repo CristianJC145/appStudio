@@ -1,0 +1,1059 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+/* ══════════════════════════════════════════
+   VARIABLES — Black & Gold Luxury
+══════════════════════════════════════════ */
+:root {
+  /* Negros puros con tinte dorado */
+  --bg-primary:   #000000;
+  --bg-secondary: #05040100;          /* negro puro */
+  --surface-1:    #0c0a04;            /* negro dorado profundo */
+  --surface-2:    #131008;            /* negro ámbar */
+  --surface-3:    #1c1810;            /* negro dorado cálido */
+  --surface-blur: rgba(10,8,2,0.90);
+
+  /* Separadores dorados — nada de grises */
+  --sep:          rgba(212,168,67,0.16);
+  --sep2:         rgba(212,168,67,0.08);
+
+  /* Paleta oro 18K completa */
+  --gold:         #9a7520;   /* oro profundo */
+  --gold2:        #c9960f;   /* oro rico */
+  --gold3:        #d4a843;   /* oro medio */
+  --gold4:        #e8c96b;   /* oro brillante */
+  --gold5:        #f5e6a8;   /* oro claro */
+  --gold6:        #fdf3d0;   /* oro perlado */
+
+  /* Sombras doradas */
+  --glow-sm:      0 0 8px   rgba(212,168,67,0.12);
+  --glow-md:      0 0 14px  rgba(212,168,67,0.14), 0 0 4px rgba(212,168,67,0.10);
+  --glow-lg:      0 0 22px  rgba(212,168,67,0.12), 0 0 8px rgba(212,168,67,0.08);
+  --glow-xl:      0 0 32px  rgba(212,168,67,0.10), 0 0 12px rgba(212,168,67,0.07);
+
+  /* Bordes dorados */
+  --border-dim:   rgba(212,168,67,0.12);
+  --border-soft:  rgba(212,168,67,0.22);
+  --border-mid:   rgba(212,168,67,0.38);
+  --border-strong:rgba(212,168,67,0.60);
+
+  /* Texto */
+  --text:         #f8f0dc;            /* crema dorada */
+  --text2:        rgba(236, 216, 154, 0.55);
+  --text3:        rgba(225, 181, 138, 0.66);
+  --text4:        rgba(197, 166, 86, 0.22);
+
+  /* Semánticos */
+  --green:        #2dbe60;
+  --red:          #e8483c;
+  --aurora:       #4ab8d4;
+
+  /* Geometría */
+  --radius:       16px;
+  --radius-sm:    10px;
+  --radius-lg:    22px;
+  --radius-pill:  100px;
+
+  /* Tipografía */
+  --font-title:   'Cormorant Garamond', serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Movimiento */
+  --t:            0.20s cubic-bezier(0.4, 0, 0.2, 1);
+  --spring:       0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Compat legacy */
+  --transition:   var(--t);
+  --border:       var(--border-dim);
+  --border2:      var(--border-mid);
+  --void:         var(--bg-primary);
+  --nebula:       var(--surface-1);
+  --stardust:     var(--surface-2);
+  --separator:    var(--sep);
+  --separator2:   var(--sep2);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ══════════════════════════════════════════
+   FONDO — Lujo negro con resplandor dorado
+══════════════════════════════════════════ */
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Capa 1: Resplandores dorados ambientales */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 35% at 5% -5%,   rgba(180,130,20,0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 50% at 100% 0%,   rgba(160,110,10,0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 45% at 0%   100%, rgba(140,100,8,0.13)  0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, rgba(120,85,5,0.10)   0%, transparent 50%),
+    radial-gradient(ellipse 30% 30% at 50%  50%,  rgba(100,72,4,0.06)   0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Capa 2: Grain premium para textura de lujo */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.032;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ══ App shell ══ */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ══════════════════════════════════════════
+   HEADER — Barra negra con velo dorado
+══════════════════════════════════════════ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 62px;
+  background: rgba(0,0,0,0.82);
+  backdrop-filter: saturate(200%) blur(32px);
+  -webkit-backdrop-filter: saturate(200%) blur(32px);
+  border-bottom: 1px solid var(--border-dim);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  /* sombra dorada cayendo hacia abajo */
+  box-shadow:
+    0 1px 0 var(--border-dim),
+    0 2px 12px rgba(0,0,0,0.55),
+    0 4px 20px rgba(180,130,15,0.03);
+}
+
+/* Línea dorada superior */
+.app-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent      0%,
+    var(--gold2)    15%,
+    var(--gold4)    40%,
+    var(--gold5)    50%,
+    var(--gold4)    60%,
+    var(--gold2)    85%,
+    transparent    100%
+  );
+  opacity: 0.85;
+}
+
+/* Brillo tenue en la parte baja del header */
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(212,168,67,0.12), transparent
+  );
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+}
+
+.app-logo img {
+  height: 40px;
+  width: auto;
+}
+
+.logo-icon {
+  font-size: 1.35rem;
+  background: linear-gradient(145deg, var(--gold6), var(--gold5), var(--gold4), var(--gold3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 8px rgba(212,168,67,0.40));
+}
+
+.app-logo span {
+  font-weight: 1000;
+}
+
+.app-logo em {
+  font-style: italic;
+  font-weight: 200;
+  color: var(--text3);
+  letter-spacing: 0.06em;
+  margin-left: -3px;
+}
+
+/* ══════════════════════════════════════════
+   NAVEGACIÓN — Pills negros, activo dorado
+══════════════════════════════════════════ */
+.app-nav {
+  display: flex;
+  gap: 2px;
+  background: rgba(0,0,0,0.60);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  border: 1px solid var(--border-soft);
+  box-shadow: inset 0 1px 0 rgba(212,168,67,0.05);
+}
+
+.nav-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-family: var(--font-body);
+  font-size: 0.73rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 6px 20px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color var(--t), background var(--t), box-shadow var(--t);
+  white-space: nowrap;
+}
+
+.nav-btn:hover {
+  color: var(--gold4);
+  background: rgba(212,168,67,0.06);
+}
+
+.nav-btn.active {
+  color: #000;
+  background: linear-gradient(150deg, var(--gold5), var(--gold4), var(--gold3), var(--gold2));
+  box-shadow:
+    0 1px 4px rgba(0,0,0,0.50),
+    0 0 10px rgba(212,168,67,0.22),
+    inset 0 1px 0 rgba(255,255,255,0.28);
+  font-weight: 600;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 2px; right: 5px;
+  font-size: 0.52rem;
+  color: var(--gold4);
+  font-family: var(--font-mono);
+  animation: pulse 1.4s infinite;
+}
+
+.nav-btn.active .nav-badge { color: rgba(0,0,0,0.55); }
+
+/* ══ Main ══ */
+.app-main {
+  flex: 1;
+  padding: 32px 36px;
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ══════════════════════════════════════════
+   CARD — Negro dorado con sombra luxury
+══════════════════════════════════════════ */
+.card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.55),
+    0 6px 24px rgba(0,0,0,0.35),
+    0 0 16px  rgba(180,130,15,0.04),
+    inset 0 1px 0 rgba(212,168,67,0.08);
+}
+
+.card-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-title {
+  font-family: var(--font-body);
+  font-size: 0.80rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.card-subtitle {
+  font-size: 0.67rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  margin-top: 3px;
+}
+
+.card-body { padding: 20px 22px; }
+
+/* ══════════════════════════════════════════
+   FORMULARIOS — Negros con foco dorado
+══════════════════════════════════════════ */
+label {
+  display: block;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 7px;
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 400;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t), background var(--t);
+}
+
+input:focus, select:focus, textarea:focus {
+  background: rgba(0,0,0,0.70);
+  border-color: var(--gold3);
+  box-shadow:
+    0 0 0 3px rgba(212,168,67,0.14),
+    0 0 20px rgba(212,168,67,0.10),
+    inset 0 1px 0 rgba(212,168,67,0.06);
+}
+
+input::placeholder, textarea::placeholder { color: var(--text4); }
+
+input[type="number"] { font-family: var(--font-mono); font-size: 0.82rem; }
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23c9960f'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select option { background: #0c0a04; color: var(--text); }
+
+textarea { resize: vertical; min-height: 120px; line-height: 1.75; }
+
+/* ══════════════════════════════════════════
+   SLIDER — Track negro, thumb dorado
+══════════════════════════════════════════ */
+.slider-row { display: flex; align-items: center; gap: 12px; }
+
+input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(212,168,67,0.20), rgba(212,168,67,0.08));
+  border-radius: var(--radius-pill);
+  border: none;
+  outline: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  background: linear-gradient(145deg, var(--gold6), var(--gold5), var(--gold4), var(--gold3));
+  border-radius: 50%;
+  box-shadow:
+    0 1px 4px rgba(0,0,0,0.55),
+    0 0 8px rgba(212,168,67,0.30),
+    inset 0 1px 0 rgba(255,255,255,0.30);
+  transition: transform var(--spring), box-shadow var(--t);
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.20);
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.50),
+    0 0 12px rgba(212,168,67,0.40),
+    inset 0 1px 0 rgba(255,255,255,0.32);
+}
+
+.slider-val {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--gold4);
+  min-width: 38px;
+  text-align: right;
+  font-weight: 500;
+}
+
+/* ══════════════════════════════════════════
+   TOGGLE — iOS switch negro/dorado
+══════════════════════════════════════════ */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.toggle-label { font-size: 0.84rem; color: var(--text2); font-weight: 400; }
+.toggle { position: relative; width: 44px; height: 24px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+
+.toggle-track {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.70);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.toggle input:checked + .toggle-track {
+  background: linear-gradient(135deg, var(--gold2), var(--gold3), var(--gold4));
+  border-color: var(--gold3);
+  box-shadow:
+    0 0 8px rgba(212,168,67,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  background: linear-gradient(145deg, #fff, #f0e8d0);
+  border-radius: 50%;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.55);
+  transition: transform var(--t);
+}
+
+.toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
+/* ══════════════════════════════════════════
+   BOTONES — Dorado sólido / negro contornos
+══════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 22px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.80rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  border: none;
+  transition: all var(--t);
+  white-space: nowrap;
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Primario: dorado sólido */
+.btn-primary {
+  background: linear-gradient(150deg, var(--gold6), var(--gold5), var(--gold4), var(--gold3), var(--gold2));
+  color: #000;
+  font-weight: 600;
+  box-shadow:
+    0 2px 10px rgba(212,168,67,0.22),
+    0 1px 3px  rgba(0,0,0,0.40),
+    inset 0 1px 0 rgba(255,255,255,0.28);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(150deg, #fff, var(--gold6), var(--gold5), var(--gold4));
+  box-shadow:
+    0 3px 16px rgba(212,168,67,0.30),
+    0 1px 6px  rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.36);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 6px rgba(212,168,67,0.20);
+}
+
+/* Secundario: negro con borde dorado */
+.btn-secondary {
+  background: rgba(0,0,0,0.55);
+  color: var(--text2);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.40), inset 0 1px 0 rgba(212,168,67,0.04);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(212,168,67,0.06);
+  border-color: var(--border-mid);
+  color: var(--gold4);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+
+/* Ghost: transparente con borde dorado tenue */
+.btn-ghost {
+  background: transparent;
+  color: var(--text3);
+  border: 1px solid var(--border-dim);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(212,168,67,0.05);
+  color: var(--gold3);
+  border-color: var(--border-soft);
+}
+
+/* Peligro */
+.btn-danger {
+  background: rgba(232,72,60,0.08);
+  color: var(--red);
+  border: 1px solid rgba(232,72,60,0.22);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(232,72,60,0.16);
+  border-color: rgba(232,72,60,0.40);
+}
+
+/* Éxito */
+.btn-success {
+  background: rgba(45,190,96,0.08);
+  color: var(--green);
+  border: 1px solid rgba(45,190,96,0.22);
+}
+
+.btn-success:hover:not(:disabled) {
+  background: rgba(45,190,96,0.16);
+  border-color: rgba(45,190,96,0.40);
+}
+
+.btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.btn-lg  { padding: 14px 32px; font-size: 0.875rem; font-weight: 600; border-radius: var(--radius); }
+.btn-sm  { padding: 5px 14px;  font-size: 0.70rem; }
+
+/* ══════════════════════════════════════════
+   FIELDS
+══════════════════════════════════════════ */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.section-divider {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text4);
+  font-family: var(--font-body);
+  font-weight: 600;
+  padding: 14px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(212,168,67,0.18), transparent
+  );
+}
+
+/* ══════════════════════════════════════════
+   LOG DE EVENTOS
+══════════════════════════════════════════ */
+.events-log {
+  background: #000;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  height: 320px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  line-height: 1.90;
+  box-shadow: inset 0 2px 12px rgba(0,0,0,0.60), inset 0 0 40px rgba(212,168,67,0.02);
+}
+
+.event-line { display: flex; gap: 12px; align-items: flex-start; }
+.event-time { color: var(--text4); flex-shrink: 0; }
+.event-dot  { flex-shrink: 0; margin-top: 2px; color: var(--gold3); }
+.event-text { color: var(--text2); flex: 1; }
+.event-line.type-done         .event-text { color: var(--green); }
+.event-line.type-error        .event-text { color: var(--red); }
+.event-line.type-intro_start  .event-text,
+.event-line.type-afirm_start  .event-text { color: var(--gold4); }
+.event-line.type-review_start .event-text { color: var(--aurora); }
+.event-line.type-afirm_ready  .event-text { color: var(--gold5); }
+
+/* ══════════════════════════════════════════
+   BARRA DE PROGRESO
+══════════════════════════════════════════ */
+.progress-bar-wrap {
+  height: 3px;
+  background: rgba(212,168,67,0.08);
+  border-radius: var(--radius-pill);
+  overflow: visible;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold2), var(--gold3), var(--gold4), var(--gold5));
+  border-radius: var(--radius-pill);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 0 6px rgba(212,168,67,0.30);
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  right: -4px; top: -3px;
+  width: 9px; height: 9px;
+  background: var(--gold5);
+  border-radius: 50%;
+  box-shadow:
+    0 0 8px rgba(212,168,67,0.50),
+    0 0 16px rgba(212,168,67,0.20);
+}
+
+/* ══════════════════════════════════════════
+   STATUS PILLS
+══════════════════════════════════════════ */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 0.63rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+
+.status-pill.running {
+  background: rgba(212,168,67,0.10);
+  color: var(--gold4);
+  border: 1px solid var(--border-soft);
+}
+.status-pill.done {
+  background: rgba(45,190,96,0.08);
+  color: var(--green);
+  border: 1px solid rgba(45,190,96,0.25);
+  box-shadow: 0 0 14px rgba(45,190,96,0.12);
+}
+.status-pill.error {
+  background: rgba(232,72,60,0.08);
+  color: var(--red);
+  border: 1px solid rgba(232,72,60,0.25);
+}
+.status-pill.review {
+  background: rgba(74,184,212,0.08);
+  color: var(--aurora);
+  border: 1px solid rgba(74,184,212,0.25);
+}
+.status-pill.idle {
+  background: rgba(0,0,0,0.50);
+  color: var(--text3);
+  border: 1px solid var(--border-dim);
+}
+
+.pulse { animation: pulse 1.6s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.18; }
+}
+
+/* ══════════════════════════════════════════
+   REVIEW CARDS
+══════════════════════════════════════════ */
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.review-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+  box-shadow:
+    0 2px 10px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(212,168,67,0.05);
+}
+
+.review-card:hover {
+  border-color: var(--border-mid);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.50),
+    0 0 12px rgba(212,168,67,0.07);
+}
+
+.review-card.decided-ok {
+  border-color: rgba(45,190,96,0.28);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+
+.review-card.decided-regenerate {
+  border-color: var(--border-mid);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45), 0 0 8px rgba(212,168,67,0.06);
+}
+
+.review-card.decided-skip {
+  border-color: var(--border-dim);
+  opacity: 0.35;
+}
+
+.review-card-num {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text4);
+  margin-bottom: 10px;
+  letter-spacing: 0.10em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.review-card-text {
+  font-family: var(--font-title);
+  font-size: 0.96rem;
+  font-weight: 300;
+  line-height: 1.72;
+  color: var(--text);
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+.review-card-audio { margin-bottom: 16px; }
+
+.review-card-audio audio {
+  width: 100%;
+  height: 32px;
+  accent-color: var(--gold3);
+}
+
+.review-card-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.58rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  margin-left: 8px;
+}
+
+.decision-badge.ok         { background: rgba(45,190,96,0.10);   color: var(--green); }
+.decision-badge.regenerate { background: rgba(212,168,67,0.10);  color: var(--gold4); }
+.decision-badge.skip       { background: rgba(0,0,0,0.50);       color: var(--text3); }
+
+/* ══════════════════════════════════════════
+   HISTORIAL
+══════════════════════════════════════════ */
+.history-list { display: flex; flex-direction: column; gap: 10px; }
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.40),
+    inset 0 1px 0 rgba(212,168,67,0.04);
+}
+
+.history-item:hover {
+  border-color: var(--border-mid);
+  box-shadow:
+    0 3px 14px rgba(0,0,0,0.48),
+    0 0 10px rgba(212,168,67,0.07);
+  transform: translateY(-1px);
+}
+
+.history-icon    { font-size: 1.3rem; color: var(--gold3); opacity: 0.80; flex-shrink: 0; }
+.history-info    { flex: 1; min-width: 0; }
+.history-name    { font-family: var(--font-body); font-size: 0.84rem; font-weight: 500; letter-spacing: 0.02em; color: var(--text); margin-bottom: 3px; }
+.history-meta    { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text3); }
+.history-actions { display: flex; gap: 7px; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════
+   DOWNLOAD BANNER — Joya dorada
+══════════════════════════════════════════ */
+.download-banner {
+  background: linear-gradient(135deg,
+    rgba(8,6,0,0.98)    0%,
+    rgba(20,16,4,0.96)  40%,
+    rgba(30,22,4,0.94)  70%,
+    rgba(12,9,0,0.98)   100%
+  );
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-lg);
+  padding: 26px 30px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.55),
+    0 0 20px rgba(180,130,15,0.06),
+    inset 0 1px 0 rgba(212,168,67,0.12);
+}
+
+/* Línea superior brillante */
+.download-banner::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent   0%,
+    var(--gold2)  10%,
+    var(--gold4)  35%,
+    var(--gold6)  50%,
+    var(--gold4)  65%,
+    var(--gold2)  90%,
+    transparent  100%
+  );
+  opacity: 0.90;
+}
+
+/* Efecto de brillo interior */
+.download-banner::after {
+  content: '';
+  position: absolute;
+  top: -60%; left: 20%; right: 20%;
+  height: 120%;
+  background: radial-gradient(ellipse at 50% 0%,
+    rgba(212,168,67,0.07) 0%, transparent 70%
+  );
+  pointer-events: none;
+}
+
+.download-banner-icon {
+  font-size: 2.5rem;
+  filter: drop-shadow(0 0 10px rgba(212,168,67,0.45));
+}
+
+.download-banner-info { flex: 1; }
+
+.download-banner-title {
+  font-family: var(--font-title);
+  font-size: 1.10rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  background: linear-gradient(90deg, var(--gold4), var(--gold5), var(--gold6));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 5px;
+}
+
+.download-banner-sub {
+  font-size: 0.72rem;
+  color: var(--text2);
+  font-family: var(--font-mono);
+}
+
+/* ══════════════════════════════════════════
+   SCRIPT TEXTAREA
+══════════════════════════════════════════ */
+.script-textarea-wrap {
+  position: relative;
+}
+
+.script-textarea-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 350px;
+  opacity: 0.06;
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+
+.script-textarea {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 0.925rem;
+  line-height: 1.82;
+  min-height: 420px;
+  color: var(--text);
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+.script-hint {
+  font-size: 0.67rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+  margin-top: 9px;
+  letter-spacing: 0.03em;
+}
+
+.script-hint span { color: var(--gold4); }
+
+/* ══════════════════════════════════════════
+   CONFIG ACCORDION
+══════════════════════════════════════════ */
+.config-section { border-bottom: 1px solid var(--border-dim); overflow: hidden; }
+.config-section:last-child { border-bottom: none; }
+
+.config-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 22px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--t);
+}
+
+.config-section-header:hover {
+  background: rgba(212,168,67,0.04);
+}
+
+.config-section-title {
+  font-size: 0.63rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text2);
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+.config-chevron { color: var(--text3); font-size: 0.58rem; transition: transform var(--t); }
+.config-chevron.open { transform: rotate(180deg); }
+.config-section-body { padding: 6px 22px 18px; }
+
+/* ══════════════════════════════════════════
+   UTILIDADES
+══════════════════════════════════════════ */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text3);
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.18;
+  filter: drop-shadow(0 0 12px rgba(212,168,67,0.30));
+}
+
+.mt-4  { margin-top: 4px; }
+.mt-8  { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.flex  { display: flex; }
+.flex-center { display: flex; align-items: center; }
+.gap-8  { gap: 8px; }
+.gap-12 { gap: 12px; }
+.justify-between { justify-content: space-between; }
+.text-accent { color: var(--gold4); }
+.text-green  { color: var(--green); }
+.text-red    { color: var(--red); }
+.text-muted  { color: var(--text2); }
+.text-xs     { font-size: 0.72rem; font-family: var(--font-mono); }
+
+/* ══════════════════════════════════════════
+   SCROLLBAR — Dorada fina
+══════════════════════════════════════════ */
+::-webkit-scrollbar       { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg,
+    rgba(212,168,67,0.45),
+    rgba(184,144,42,0.20)
+  );
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--gold4), var(--gold2));
+  box-shadow: 0 0 6px rgba(212,168,67,0.40);
+}
+
+/* ══════════════════════════════════════════
+   ANIMACIONES
+══════════════════════════════════════════ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 0.40s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes goldShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}

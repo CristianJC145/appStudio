@@ -225,18 +225,24 @@ export default function ConfigPanel({ config, setConfig }) {
             onChange={v => set("usar_ssml_breaks", v)} />
           {config.usar_ssml_breaks && (
             <>
-              <Slider label="Coma (s)" value={config.break_coma}
-                onChange={v => set("break_coma", v)} min={0} max={2} step={0.05}
-                tooltip="Pausa después de cada coma" />
-              <Slider label="Punto y coma (s)" value={config.break_punto_coma}
-                onChange={v => set("break_punto_coma", v)} min={0} max={2} step={0.05}
-                tooltip="Pausa después de ;" />
-              <Slider label="Dos puntos (s)" value={config.break_dos_puntos}
-                onChange={v => set("break_dos_puntos", v)} min={0} max={2} step={0.05}
-                tooltip="Pausa después de :" />
-              <Slider label="Puntos suspensivos (s)" value={config.break_suspensivos}
-                onChange={v => set("break_suspensivos", v)} min={0} max={3} step={0.05}
-                tooltip="Pausa después de ..." />
+              <Slider label="Coma , (s)" value={config.break_coma}
+                onChange={v => set("break_coma", v)} min={0} max={3} step={0.05} />
+              <Slider label="Punto . (s)" value={config.break_punto}
+                onChange={v => set("break_punto", v)} min={0} max={3} step={0.05} />
+              <Slider label="Puntos suspensivos … (s)" value={config.break_suspensivos}
+                onChange={v => set("break_suspensivos", v)} min={0} max={3} step={0.05} />
+              <Slider label="Dos puntos : (s)" value={config.break_dos_puntos}
+                onChange={v => set("break_dos_puntos", v)} min={0} max={3} step={0.05} />
+              <Slider label="Punto y coma ; (s)" value={config.break_punto_coma}
+                onChange={v => set("break_punto_coma", v)} min={0} max={3} step={0.05} />
+              <Slider label="Guión largo — (s)" value={config.break_guion}
+                onChange={v => set("break_guion", v)} min={0} max={3} step={0.05} />
+              <Slider label="Exclamación ! (s)" value={config.break_exclamacion}
+                onChange={v => set("break_exclamacion", v)} min={0} max={3} step={0.05} />
+              <Slider label="Interrogación ? (s)" value={config.break_interrogacion}
+                onChange={v => set("break_interrogacion", v)} min={0} max={3} step={0.05} />
+              <Slider label="Salto de párrafo (s)" value={config.break_parrafo}
+                onChange={v => set("break_parrafo", v)} min={0} max={5} step={0.1} />
             </>
           )}
         </div>

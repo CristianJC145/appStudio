@@ -86,10 +86,15 @@ class Config(BaseModel):
     pausa_entre_meditaciones: int = 5000
     # SSML breaks
     usar_ssml_breaks: bool = True
-    break_coma: float = 0.3
-    break_punto_coma: float = 0.5
-    break_dos_puntos: float = 0.4
+    break_coma: float = 0.5
+    break_punto: float = 0.7
     break_suspensivos: float = 0.8
+    break_dos_puntos: float = 0.4
+    break_punto_coma: float = 0.6
+    break_guion: float = 0.5
+    break_exclamacion: float = 0.7
+    break_interrogacion: float = 0.7
+    break_parrafo: float = 1.0
     # Extra
     extend_silence: bool = False
     factor_coma: float = 1.0
@@ -186,20 +191,37 @@ def extender_silencios_internos(audio: "AudioSegment", cfg: Config) -> "AudioSeg
 def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
     if not cfg.usar_ssml_breaks:
         return texto
-    t = texto
-    # Puntos suspensivos primero (antes de procesar el punto simple)
-    if cfg.break_suspensivos > 0:
-        t = re.sub(r'\.\.\.', f'...<break time="{cfg.break_suspensivos}s"/>', t)
-    # Coma
-    if cfg.break_coma > 0:
-        t = re.sub(r',', f',<break time="{cfg.break_coma}s"/>', t)
-    # Punto y coma
-    if cfg.break_punto_coma > 0:
-        t = re.sub(r';', f';<break time="{cfg.break_punto_coma}s"/>', t)
-    # Dos puntos (evitar :// de URLs)
-    if cfg.break_dos_puntos > 0:
-        t = re.sub(r':(?!//)', f':<break time="{cfg.break_dos_puntos}s"/>', t)
-    return f"<speak>{t}</speak>"
+
+    def b(s): return f'<break time="{s}s"/>'
+
+    # Orden: patrones más largos primero para evitar colisiones.
+    # Se usa un único re.sub para no procesar los tags ya insertados.
+    reglas = []
+    if cfg.break_parrafo      > 0: reglas.append((r'\n[ \t]*\n',    b(cfg.break_parrafo)))
+    if cfg.break_suspensivos  > 0: reglas.append((r'\.\.\.|\u2026', b(cfg.break_suspensivos)))
+    if cfg.break_guion        > 0: reglas.append((r'---|—',         b(cfg.break_guion)))
+    if cfg.break_coma         > 0: reglas.append((r',',             b(cfg.break_coma)))
+    if cfg.break_punto        > 0: reglas.append((r'\.(?!\d)',      b(cfg.break_punto)))
+    if cfg.break_dos_puntos   > 0: reglas.append((r':(?!//)',       b(cfg.break_dos_puntos)))
+    if cfg.break_punto_coma   > 0: reglas.append((r';',             b(cfg.break_punto_coma)))
+    if cfg.break_exclamacion  > 0: reglas.append((r'[!¡]',          b(cfg.break_exclamacion)))
+    if cfg.break_interrogacion > 0: reglas.append((r'[?¿]',         b(cfg.break_interrogacion)))
+
+    if reglas:
+        combined = '|'.join(f'({patron})' for patron, _ in reglas)
+        reemplazos = [r for _, r in reglas]
+        def _reemplazar(m):
+            for i, r in enumerate(reemplazos):
+                if m.group(i + 1) is not None:
+                    return r
+            return m.group(0)
+        t = re.sub(combined, _reemplazar, texto)
+    else:
+        t = texto
+
+    t = re.sub(r'\n', ' ', t)
+    t = re.sub(r'  +', ' ', t).strip()
+    return t
 
 
 def texto_a_audio_api(texto: str, ruta_salida: Path,

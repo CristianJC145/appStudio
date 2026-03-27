@@ -219,8 +219,6 @@ def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
     else:
         t = texto
 
-    t = re.sub(r'\n', ' ', t)
-    t = re.sub(r'  +', ' ', t).strip()
     return t
 
 

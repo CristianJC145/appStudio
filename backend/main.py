@@ -92,6 +92,7 @@ class Config(BaseModel):
     silence_thresh_db: int = -40
     silence_min_ms: int = 80
     max_chars_parrafo: int = 270
+    min_chars_parrafo: int = 100
 
 class GenerateRequest(BaseModel):
     guion: str
@@ -308,6 +309,72 @@ def _esperar_revision(job_id: str, section: str, items: list[str],
                     })
 
 # =============================================================
+#  HELPER DE BLOQUES
+# =============================================================
+
+def _construir_bloques(texto: str, cfg: Config) -> list[str]:
+    """
+    Divide el texto en bloques para TTS respetando:
+    - max_chars_parrafo: límite superior por bloque
+    - min_chars_parrafo: mínimo de caracteres por bloque
+      (párrafos cortos separados por líneas en blanco se fusionan
+       con el siguiente hasta alcanzar el mínimo)
+    """
+    # 1. Dividir por párrafos (líneas en blanco)
+    parrafos = [p.strip() for p in re.split(r'\n\s*\n', texto) if p.strip()]
+    parrafos = [" ".join(p.split()) for p in parrafos]
+
+    # 2. Fusionar párrafos cortos para respetar min_chars
+    fusionados: list[str] = []
+    buffer = ""
+    for parrafo in parrafos:
+        if not buffer:
+            buffer = parrafo
+        else:
+            if len(buffer) < cfg.min_chars_parrafo:
+                # buffer aún no llega al mínimo: intentar fusionar
+                candidato = buffer + " " + parrafo
+                if len(candidato) <= cfg.max_chars_parrafo:
+                    buffer = candidato
+                else:
+                    # No cabe: emitir buffer corto de todas formas y empezar nuevo
+                    fusionados.append(buffer)
+                    buffer = parrafo
+            else:
+                # buffer ya alcanzó el mínimo: emitir y empezar nuevo
+                fusionados.append(buffer)
+                buffer = parrafo
+    if buffer:
+        # Si el último buffer es corto y el bloque anterior cabe, fusionar al final
+        if (fusionados
+                and len(buffer) < cfg.min_chars_parrafo
+                and len(fusionados[-1]) + 1 + len(buffer) <= cfg.max_chars_parrafo):
+            fusionados[-1] = fusionados[-1] + " " + buffer
+        else:
+            fusionados.append(buffer)
+
+    # 3. Dividir bloques que superen max_chars por oraciones
+    bloques: list[str] = []
+    for parrafo in fusionados:
+        if len(parrafo) <= cfg.max_chars_parrafo:
+            bloques.append(parrafo)
+        else:
+            oraciones = re.split(r'(?<=[.!?])\s+', parrafo)
+            bloque_actual = ""
+            for oracion in oraciones:
+                if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
+                    bloque_actual += (" " if bloque_actual else "") + oracion
+                else:
+                    if bloque_actual:
+                        bloques.append(bloque_actual)
+                    bloque_actual = oracion
+            if bloque_actual:
+                bloques.append(bloque_actual)
+
+    return bloques
+
+
+# =============================================================
 #  JOB DE GENERACIÓN
 # =============================================================
 
@@ -332,23 +399,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── INTRO: generar todos los bloques ──────────────────────────────
         bloques_intro = []
         if tiene_intro:
-            parrafos = [p.strip() for p in re.split(r'\n\s*\n', secciones["intro"]) if p.strip()]
-            parrafos = [" ".join(p.split()) for p in parrafos]
-            for parrafo in parrafos:
-                if len(parrafo) <= cfg.max_chars_parrafo:
-                    bloques_intro.append(parrafo)
-                else:
-                    oraciones     = re.split(r'(?<=[.!?])\s+', parrafo)
-                    bloque_actual = ""
-                    for oracion in oraciones:
-                        if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
-                            bloque_actual += (" " if bloque_actual else "") + oracion
-                        else:
-                            if bloque_actual:
-                                bloques_intro.append(bloque_actual)
-                            bloque_actual = oracion
-                    if bloque_actual:
-                        bloques_intro.append(bloque_actual)
+            bloques_intro = _construir_bloques(secciones["intro"], cfg)
 
             jobs[job_id]["intro_bloques"]   = bloques_intro
             jobs[job_id]["intro_decisions"] = {}
@@ -443,23 +494,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── MEDITACIÓN: generar todos los bloques ─────────────────────────
         bloques_medit = []
         if tiene_medit:
-            parrafos = [p.strip() for p in re.split(r'\n\s*\n', secciones["meditacion"]) if p.strip()]
-            parrafos = [" ".join(p.split()) for p in parrafos]
-            for parrafo in parrafos:
-                if len(parrafo) <= cfg.max_chars_parrafo:
-                    bloques_medit.append(parrafo)
-                else:
-                    oraciones     = re.split(r'(?<=[.!?])\s+', parrafo)
-                    bloque_actual = ""
-                    for oracion in oraciones:
-                        if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
-                            bloque_actual += (" " if bloque_actual else "") + oracion
-                        else:
-                            if bloque_actual:
-                                bloques_medit.append(bloque_actual)
-                            bloque_actual = oracion
-                    if bloque_actual:
-                        bloques_medit.append(bloque_actual)
+            bloques_medit = _construir_bloques(secciones["meditacion"], cfg)
 
             jobs[job_id]["medit_bloques"]   = bloques_medit
             jobs[job_id]["medit_decisions"] = {}

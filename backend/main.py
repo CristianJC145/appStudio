@@ -336,7 +336,7 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
                 # buffer aún no llega al mínimo: intentar fusionar
                 candidato = buffer + " " + parrafo
                 if len(candidato) <= cfg.max_chars_parrafo:
-                    buffer = candidato
+                    buffer = buffer + "\n\n" + parrafo
                 else:
                     # No cabe: emitir buffer corto de todas formas y empezar nuevo
                     fusionados.append(buffer)
@@ -350,7 +350,7 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
         if (fusionados
                 and len(buffer) < cfg.min_chars_parrafo
                 and len(fusionados[-1]) + 1 + len(buffer) <= cfg.max_chars_parrafo):
-            fusionados[-1] = fusionados[-1] + " " + buffer
+            fusionados[-1] = fusionados[-1] + "\n\n" + buffer
         else:
             fusionados.append(buffer)
 
@@ -364,7 +364,7 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
             bloque_actual = ""
             for oracion in oraciones:
                 if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
-                    bloque_actual += (" " if bloque_actual else "") + oracion
+                    bloque_actual += ("\n\n" if bloque_actual else "") + oracion
                 else:
                     if bloque_actual:
                         bloques.append(bloque_actual)
@@ -376,7 +376,7 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
     resultado: list[str] = []
     for bloque in bloques:
         if resultado and len(resultado[-1]) < cfg.min_chars_parrafo:
-            candidato = resultado[-1] + " " + bloque
+            candidato = resultado[-1] + "\n\n" + bloque
             if len(candidato) <= cfg.max_chars_parrafo:
                 resultado[-1] = candidato
                 continue

@@ -68,7 +68,7 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         {audioUrl ? (
           <audio
             controls
-            src={`http://localhost:8000${audioUrl}`}
+            src={`${import.meta.env.VITE_API_URL}${audioUrl}`}
             style={{ width: "100%", height: 36 }}
           />
         ) : (

@@ -104,7 +104,7 @@ export default function App() {
     setJobStatus("starting")
 
     try {
-      const res = await fetch("http://localhost:8000/api/generate", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guion, config, nombre }),
@@ -115,7 +115,7 @@ export default function App() {
       setTab("progress")
 
       if (esRef.current) esRef.current.close()
-      const es = new EventSource(`http://localhost:8000/api/events/${id}`)
+      const es = new EventSource(`${import.meta.env.VITE_API_URL}/api/events/${id}`)
       esRef.current = es
 
       es.onmessage = (e) => {
@@ -191,7 +191,7 @@ export default function App() {
           setTab("progress")
         }
         if (evt.type === "done") {
-          setDownloadUrl(`http://localhost:8000${evt.data.download_url}`)
+          setDownloadUrl(`${import.meta.env.VITE_API_URL}${evt.data.download_url}`)
           setDurationMins(evt.data.duration_mins)
           setJobStatus("done")
           setGenerating(false)
@@ -242,7 +242,7 @@ export default function App() {
         })
       }
     }
-    await fetch("http://localhost:8000/api/review", {
+    await fetch(`${import.meta.env.VITE_API_URL}/api/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ job_id: jobId, section, index, decision, new_text: newText || null }),
@@ -257,7 +257,7 @@ export default function App() {
     for (let i = 0; i < items.length; i++) {
       if (!decisions[i]) await submitDecision(section, i, "ok")
     }
-    await fetch(`http://localhost:8000/api/finalize/${jobId}/${section}`, {
+    await fetch(`${import.meta.env.VITE_API_URL}/api/finalize/${jobId}/${section}`, {
       method: "POST"
     })
     setJobStatus("running")

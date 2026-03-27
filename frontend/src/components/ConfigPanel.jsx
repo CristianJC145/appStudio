@@ -83,7 +83,7 @@ export default function ConfigPanel({ config, setConfig }) {
     if (!config.api_key) return
     setLoadingVoices(true)
     try {
-      const res = await fetch(`http://localhost:8000/api/voices?api_key=${config.api_key}`)
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/voices?api_key=${config.api_key}`)
       const data = await res.json()
       setVoices(data)
     } catch {}

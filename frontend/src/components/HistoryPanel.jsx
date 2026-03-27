@@ -16,7 +16,7 @@ export default function HistoryPanel() {
   const fetchHistory = async () => {
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/api/history")
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`)
       const data = await res.json()
       setHistory(data)
     } catch {}
@@ -27,7 +27,7 @@ export default function HistoryPanel() {
 
   const handleDelete = async (filename) => {
     if (!confirm(`¿Eliminar "${filename}"?`)) return
-    await fetch(`http://localhost:8000/api/history/${filename}`, { method: "DELETE" })
+    await fetch(`${import.meta.env.VITE_API_URL}/api/history/${filename}`, { method: "DELETE" })
     fetchHistory()
   }
 
@@ -81,7 +81,7 @@ export default function HistoryPanel() {
                     <audio
                       autoPlay
                       controls
-                      src={`http://localhost:8000${item.download_url}`}
+                      src={`${import.meta.env.VITE_API_URL}${item.download_url}`}
                       style={{ marginTop: 8, width: "100%", height: 32, accentColor: "var(--accent)" }}
                       onEnded={() => setPlaying(null)}
                     />
@@ -95,7 +95,7 @@ export default function HistoryPanel() {
                     {playing === item.filename ? "■ Parar" : "▶ Escuchar"}
                   </button>
                   <a
-                    href={`http://localhost:8000${item.download_url}`}
+                    href={`${import.meta.env.VITE_API_URL}${item.download_url}`}
                     download={item.filename}
                     className="btn btn-secondary btn-sm"
                   >

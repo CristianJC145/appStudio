@@ -219,6 +219,29 @@ export default function ConfigPanel({ config, setConfig }) {
         </div>
       </Section>
 
+      <Section title="Pausas SSML" open={openSections["Pausas SSML"]} onToggle={() => toggleSection("Pausas SSML")}>
+        <div style={{ marginTop: 6 }}>
+          <Toggle label="Insertar breaks por puntuación" value={config.usar_ssml_breaks}
+            onChange={v => set("usar_ssml_breaks", v)} />
+          {config.usar_ssml_breaks && (
+            <>
+              <Slider label="Coma (s)" value={config.break_coma}
+                onChange={v => set("break_coma", v)} min={0} max={2} step={0.05}
+                tooltip="Pausa después de cada coma" />
+              <Slider label="Punto y coma (s)" value={config.break_punto_coma}
+                onChange={v => set("break_punto_coma", v)} min={0} max={2} step={0.05}
+                tooltip="Pausa después de ;" />
+              <Slider label="Dos puntos (s)" value={config.break_dos_puntos}
+                onChange={v => set("break_dos_puntos", v)} min={0} max={2} step={0.05}
+                tooltip="Pausa después de :" />
+              <Slider label="Puntos suspensivos (s)" value={config.break_suspensivos}
+                onChange={v => set("break_suspensivos", v)} min={0} max={3} step={0.05}
+                tooltip="Pausa después de ..." />
+            </>
+          )}
+        </div>
+      </Section>
+
       <Section title="Silencios Internos" open={openSections["Silencios Internos"]} onToggle={() => toggleSection("Silencios Internos")}>
         <div style={{ marginTop: 6 }}>
           <Toggle label="Extender silencios internos" value={config.extend_silence}

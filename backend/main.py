@@ -84,6 +84,12 @@ class Config(BaseModel):
     pausa_intro_a_afirm: int = 2000
     pausa_afirm_a_medit: int = 3000
     pausa_entre_meditaciones: int = 5000
+    # SSML breaks
+    usar_ssml_breaks: bool = True
+    break_coma: float = 0.3
+    break_punto_coma: float = 0.5
+    break_dos_puntos: float = 0.4
+    break_suspensivos: float = 0.8
     # Extra
     extend_silence: bool = False
     factor_coma: float = 1.0
@@ -177,11 +183,30 @@ def extender_silencios_internos(audio: "AudioSegment", cfg: Config) -> "AudioSeg
         resultado += audio[cursor:]
     return resultado
 
+def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
+    if not cfg.usar_ssml_breaks:
+        return texto
+    t = texto
+    # Puntos suspensivos primero (antes de procesar el punto simple)
+    if cfg.break_suspensivos > 0:
+        t = re.sub(r'\.\.\.', f'...<break time="{cfg.break_suspensivos}s"/>', t)
+    # Coma
+    if cfg.break_coma > 0:
+        t = re.sub(r',', f',<break time="{cfg.break_coma}s"/>', t)
+    # Punto y coma
+    if cfg.break_punto_coma > 0:
+        t = re.sub(r';', f';<break time="{cfg.break_punto_coma}s"/>', t)
+    # Dos puntos (evitar :// de URLs)
+    if cfg.break_dos_puntos > 0:
+        t = re.sub(r':(?!//)', f':<break time="{cfg.break_dos_puntos}s"/>', t)
+    return f"<speak>{t}</speak>"
+
+
 def texto_a_audio_api(texto: str, ruta_salida: Path,
                       voice_speed: float, cfg: Config) -> bool:
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
-    texto_tts = texto.replace(",", ", ---")
+    texto_tts = insertar_breaks_ssml(texto, cfg)
     payload = {
         "text": texto_tts,
         "model_id": cfg.model_id,

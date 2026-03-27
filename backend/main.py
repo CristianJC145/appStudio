@@ -92,7 +92,7 @@ class Config(BaseModel):
     silence_thresh_db: int = -40
     silence_min_ms: int = 80
     max_chars_parrafo: int = 270
-    min_chars_parrafo: int = 220
+    min_chars_parrafo: int = 230
 
 class GenerateRequest(BaseModel):
     guion: str
@@ -371,7 +371,17 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
             if bloque_actual:
                 bloques.append(bloque_actual)
 
-    return bloques
+    # 4. Pase final: fusionar bloques que quedaron por debajo del mínimo
+    resultado: list[str] = []
+    for bloque in bloques:
+        if resultado and len(resultado[-1]) < cfg.min_chars_parrafo:
+            candidato = resultado[-1] + " " + bloque
+            if len(candidato) <= cfg.max_chars_parrafo:
+                resultado[-1] = candidato
+                continue
+        resultado.append(bloque)
+
+    return resultado
 
 
 # =============================================================

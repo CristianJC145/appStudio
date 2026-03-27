@@ -194,30 +194,40 @@ def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
 
     def b(s): return f'<break time="{s}s"/>'
 
-    # Orden: patrones más largos primero para evitar colisiones.
-    # Se usa un único re.sub para no procesar los tags ya insertados.
+    # Paso 1: reemplazar puntuación conservando el carácter original + espacio + break.
+    # Un único re.sub para evitar procesar los tags ya insertados.
+    # ¿ y ¡ son signos de apertura — no generan break.
     reglas = []
-    if cfg.break_parrafo      > 0: reglas.append((r'\n[ \t]*\n',    b(cfg.break_parrafo)))
-    if cfg.break_suspensivos  > 0: reglas.append((r'\.\.\.|\u2026', b(cfg.break_suspensivos)))
-    if cfg.break_guion        > 0: reglas.append((r'---|—',         b(cfg.break_guion)))
-    if cfg.break_coma         > 0: reglas.append((r',',             b(cfg.break_coma)))
-    if cfg.break_punto        > 0: reglas.append((r'\.(?!\d)',      b(cfg.break_punto)))
-    if cfg.break_dos_puntos   > 0: reglas.append((r':(?!//)',       b(cfg.break_dos_puntos)))
-    if cfg.break_punto_coma   > 0: reglas.append((r';',             b(cfg.break_punto_coma)))
-    if cfg.break_exclamacion  > 0: reglas.append((r'[!¡]',          b(cfg.break_exclamacion)))
-    if cfg.break_interrogacion > 0: reglas.append((r'[?¿]',         b(cfg.break_interrogacion)))
+    if cfg.break_suspensivos   > 0: reglas.append((r'\.\.\.|\u2026', cfg.break_suspensivos))
+    if cfg.break_guion         > 0: reglas.append((r'---|—',         cfg.break_guion))
+    if cfg.break_coma          > 0: reglas.append((r',',             cfg.break_coma))
+    if cfg.break_punto         > 0: reglas.append((r'\.(?!\d)',      cfg.break_punto))
+    if cfg.break_dos_puntos    > 0: reglas.append((r':(?!//)',       cfg.break_dos_puntos))
+    if cfg.break_punto_coma    > 0: reglas.append((r';',             cfg.break_punto_coma))
+    if cfg.break_exclamacion   > 0: reglas.append((r'!',             cfg.break_exclamacion))
+    if cfg.break_interrogacion > 0: reglas.append((r'\?',            cfg.break_interrogacion))
 
     if reglas:
         combined = '|'.join(f'({patron})' for patron, _ in reglas)
-        reemplazos = [r for _, r in reglas]
+        tiempos = [t for _, t in reglas]
         def _reemplazar(m):
-            for i, r in enumerate(reemplazos):
+            for i, t in enumerate(tiempos):
                 if m.group(i + 1) is not None:
-                    return r
+                    return f'{m.group(i + 1)} {b(t)}'
             return m.group(0)
         t = re.sub(combined, _reemplazar, texto)
     else:
         t = texto
+
+    # Paso 2: saltos de párrafo.
+    # Si ya hay un break de puntuación justo antes del \n\n, lo reemplaza por el de párrafo
+    # (evita doble break). Si no hay ninguno, inserta el de párrafo.
+    if cfg.break_parrafo > 0:
+        brk = b(cfg.break_parrafo)
+        # Caso: "texto. <break Xs/>\n\n" → "texto. <break 1.0s/>\n\n"
+        t = re.sub(r' <break time="[\d.]+s"/>([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
+        # Caso: "texto\n\n" sin break previo → "texto <break 1.0s/>\n\n"
+        t = re.sub(r'(?<!/>)([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
 
     return t
 

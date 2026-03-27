@@ -181,8 +181,9 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
                       voice_speed: float, cfg: Config) -> bool:
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
+    texto_tts = texto.replace(",", ", ---")
     payload = {
-        "text": texto,
+        "text": texto_tts,
         "model_id": cfg.model_id,
         "language_code": cfg.language_code,
         "voice_settings": {**cfg.voice_settings.model_dump(), "speed": voice_speed},

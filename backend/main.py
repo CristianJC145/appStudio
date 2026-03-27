@@ -92,7 +92,7 @@ class Config(BaseModel):
     silence_thresh_db: int = -40
     silence_min_ms: int = 80
     max_chars_parrafo: int = 270
-    min_chars_parrafo: int = 100
+    min_chars_parrafo: int = 220
 
 class GenerateRequest(BaseModel):
     guion: str

@@ -4,31 +4,27 @@ import { useState, useEffect, useRef } from "react"
 //  Player de audio con controles de salto
 // ─────────────────────────────────────────────────────────────
 function AudioPlayer({ src }) {
-  const audioRef               = useRef(null)
-  const durRef                 = useRef(0)       // ref para evitar NaN en skip
-  const [playing, setPlaying]  = useState(false)
-  const [current, setCurrent]  = useState(0)
-  const [duration, setDuration]= useState(0)
-  const [speed, setSpeed]      = useState(1)
+  const audioRef                = useRef(null)
+  const [playing, setPlaying]   = useState(false)
+  const [current, setCurrent]   = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [speed, setSpeed]       = useState(1)
   const SPEEDS = [1, 1.5, 2]
 
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
     a.pause()
-    a.currentTime = 0
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
-    durRef.current = 0
     setSpeed(1)
     a.playbackRate = 1
   }, [src])
 
   const fmt = (s) => {
     if (!s || isNaN(s)) return "0:00"
-    const m = Math.floor(s / 60)
-    return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`
   }
 
   const toggle = () => {
@@ -38,26 +34,20 @@ function AudioPlayer({ src }) {
     setPlaying(p => !p)
   }
 
-  // Usa durRef para evitar el NaN que reinicia el audio
   const skip = (secs) => {
     const a = audioRef.current
-    const dur = durRef.current
-    if (!a || !dur) return
-    a.currentTime = Math.max(0, Math.min(dur, a.currentTime + secs))
+    if (!a) return
+    const next = Math.max(0, Math.min(a.duration || 0, a.currentTime + secs))
+    a.currentTime = next
+    setCurrent(next)
   }
 
   const onSeek = (e) => {
     const a = audioRef.current
-    const dur = durRef.current
-    if (!a || !dur) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    a.currentTime = ((e.clientX - rect.left) / rect.width) * dur
-  }
-
-  const onLoaded = (e) => {
-    const dur = e.target.duration
-    durRef.current = dur
-    setDuration(dur)
+    if (!a || !duration) return
+    const val = parseFloat(e.target.value)
+    a.currentTime = val
+    setCurrent(val)
   }
 
   const cycleSpeed = () => {
@@ -66,23 +56,27 @@ function AudioPlayer({ src }) {
     if (audioRef.current) audioRef.current.playbackRate = next
   }
 
-  const pct = duration ? `${(current / duration) * 100}%` : "0%"
-
   return (
     <div className="audio-player">
       <audio
         ref={audioRef}
         src={src}
-        preload="metadata"
+        preload="auto"
         onTimeUpdate={e => setCurrent(e.target.currentTime)}
-        onLoadedMetadata={onLoaded}
+        onLoadedMetadata={e => setDuration(e.target.duration)}
         onEnded={() => setPlaying(false)}
       />
 
-      {/* Barra de progreso */}
-      <div className="ap-progress" onClick={onSeek}>
-        <div className="ap-progress-fill" style={{ width: pct }} />
-      </div>
+      {/* Barra de progreso — input range nativo para seek confiable */}
+      <input
+        className="ap-seek"
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={0.1}
+        value={current}
+        onChange={onSeek}
+      />
 
       {/* Controles */}
       <div className="ap-controls">
@@ -141,8 +135,8 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         )}
       </div>
 
-      <div className="review-card-text" style={{ whiteSpace: "pre-wrap" }}>
-        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/[ \t]+/g, " ").replace(/\n /g, "\n").trim()}
+      <div className="review-card-text">
+        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/\s+/g, " ").trim()}
       </div>
 
       {editing && (

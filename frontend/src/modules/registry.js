@@ -1,0 +1,40 @@
+const modules = [
+  {
+    id: "guiones",
+    name: "Automatización de Audios",
+    description: "Convierte guiones de meditación en audio narrado con voces de ElevenLabs. Intro, afirmaciones y meditación con control total.",
+    icon: "◈",
+    path: "/studio/guiones",
+    status: "active",
+    accent: "#c9960f",
+  },
+  {
+    id: "miniaturas",
+    name: "Automatización de Miniaturas",
+    description: "Genera miniaturas para tus videos con plantillas premium y texto dinámico.",
+    icon: "◉",
+    path: "/studio/miniaturas",
+    status: "coming-soon",
+    accent: "#4ab8d4",
+  },
+  {
+    id: "bucles",
+    name: "Bucles de Video",
+    description: "Crea bucles de música ambiente y sonidos de naturaleza para meditaciones.",
+    icon: "⟳",
+    path: "/studio/bucles",
+    status: "coming-soon",
+    accent: "#2dbe60",
+  },
+  {
+    id: "imagenes",
+    name: "Generación de Imágenes",
+    description: "Produce imágenes para portadas, redes sociales y material visual de tus meditaciones.",
+    icon: "✦",
+    path: "/studio/imagenes",
+    status: "coming-soon",
+    accent: "#9370db",
+  },
+]
+
+export default modules

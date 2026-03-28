@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(python -c \"from routers import guiones; from main import app; print\\(''OK — routers:'', [r.path for r in app.routes[:5]]\\)\")",
+      "Bash(venv/Scripts/python -c \"from routers import guiones; from main import app; print\\(''OK — routes:'', len\\(app.routes\\)\\)\")",
+      "Bash(uipro init:*)",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"tech dashboard SaaS dark luxury professional\" --design-system -p \"Meditation Audio Studio\" -f markdown)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"tech dashboard SaaS dark luxury professional\" --design-system -p \"Meditation Audio Studio\" -f markdown)"
+    ]
+  }
+}

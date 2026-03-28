@@ -269,6 +269,8 @@ export default function ConfigPanel({ config, setConfig }) {
         <div style={{ marginTop: 6 }}>
           <NumInput label="Máx. caracteres por párrafo" value={config.max_chars_parrafo}
             onChange={v => set("max_chars_parrafo", v)} min={100} max={800} />
+          <NumInput label="Mín. caracteres por bloque" value={config.min_chars_parrafo ?? 100}
+            onChange={v => set("min_chars_parrafo", v)} min={0} max={500} />
           <NumInput label="Umbral silencio (dBFS)" value={config.silence_thresh_db}
             onChange={v => set("silence_thresh_db", v)} min={-80} max={-10} />
           <NumInput label="Silencio mínimo (ms)" value={config.silence_min_ms}

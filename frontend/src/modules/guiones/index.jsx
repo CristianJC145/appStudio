@@ -1,0 +1,280 @@
+import { useState, useRef, useCallback } from "react"
+import ConfigPanel from "./components/ConfigPanel"
+import ScriptEditor from "./components/ScriptEditor"
+import GenerationProgress from "./components/GenerationProgress"
+import ReviewPanel from "./components/ReviewPanel"
+import HistoryPanel from "./components/HistoryPanel"
+
+const DEFAULT_CONFIG = {
+  api_key: "",
+  voice_id: "0ZflTCV1dnNGRdqxOiW6",
+  model_id: "eleven_multilingual_v2",
+  language_code: "es",
+  voice_settings: {
+    stability: 0.45,
+    similarity_boost: 0.95,
+    style: 0.01,
+    use_speaker_boost: true,
+  },
+  intro_voice_speed: 1.0,
+  intro_tempo_factor: 0.98,
+  afirm_voice_speed: 0.94,
+  afirm_tempo_factor: 0.95,
+  medit_voice_speed: 0.9,
+  medit_tempo_factor: 0.9,
+  pausa_entre_oraciones: 400,
+  pausa_entre_afirmaciones: 10000,
+  pausa_intro_a_afirm: 2000,
+  pausa_afirm_a_medit: 3000,
+  pausa_entre_meditaciones: 5000,
+  usar_ssml_breaks: true,
+  break_coma: 0.5,
+  break_punto: 0.7,
+  break_suspensivos: 0.8,
+  break_dos_puntos: 0.4,
+  break_punto_coma: 0.6,
+  break_guion: 0.5,
+  break_exclamacion: 0.7,
+  break_interrogacion: 0.7,
+  break_parrafo: 1.0,
+  extend_silence: false,
+  factor_coma: 1.0,
+  factor_punto: 1.2,
+  factor_suspensivos: 1.5,
+  silence_thresh_db: -40,
+  silence_min_ms: 80,
+  max_chars_parrafo: 270,
+  min_chars_parrafo: 100,
+}
+
+const TABS = [
+  { id: "editor",   label: "Guion" },
+  { id: "progress", label: "Progreso" },
+  { id: "review",   label: "Revisión" },
+  { id: "history",  label: "Historial" },
+]
+
+export default function GuionesModule() {
+  const [tab, setTab] = useState("editor")
+  const [config, setConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("medi_config")
+      return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG
+    } catch { return DEFAULT_CONFIG }
+  })
+
+  const [guion, setGuion]   = useState("")
+  const [nombre, setNombre] = useState("meditacion")
+  const [jobId, setJobId]   = useState(null)
+  const [jobStatus, setJobStatus] = useState(null)
+  const [events, setEvents] = useState([])
+
+  const [introBloques, setIntroBloques]     = useState([])
+  const [introAudios, setIntroAudios]       = useState({})
+  const [introDecisions, setIntroDecisions] = useState({})
+
+  const [afirmaciones, setAfirmaciones]     = useState([])
+  const [afirmAudios, setAfirmAudios]       = useState({})
+  const [afirmDecisions, setAfirmDecisions] = useState({})
+
+  const [meditaciones, setMeditaciones]     = useState([])
+  const [meditAudios, setMeditAudios]       = useState({})
+  const [meditDecisions, setMeditDecisions] = useState({})
+
+  const [reviewSection, setReviewSection] = useState(null)
+  const [downloadUrl, setDownloadUrl]     = useState(null)
+  const [durationMins, setDurationMins]   = useState(null)
+  const [generating, setGenerating]       = useState(false)
+  const esRef = useRef(null)
+
+  const addEvent = useCallback((evt) => {
+    setEvents(prev => [...prev, { ...evt, ts: Date.now() }])
+  }, [])
+
+  const saveConfig = (next) => {
+    setConfig(next)
+    localStorage.setItem("medi_config", JSON.stringify(next))
+  }
+
+  const startGeneration = async () => {
+    if (!config.api_key) return alert("Ingresa tu API Key de ElevenLabs")
+    if (!guion.trim())   return alert("El guion está vacío")
+
+    setGenerating(true)
+    setEvents([])
+    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({})
+    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({})
+    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({})
+    setReviewSection(null)
+    setDownloadUrl(null)
+    setDurationMins(null)
+    setJobStatus("starting")
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guion, config, nombre }),
+      })
+      const data = await res.json()
+      const id   = data.job_id
+      setJobId(id)
+      setTab("progress")
+
+      if (esRef.current) esRef.current.close()
+      const es = new EventSource(`${import.meta.env.VITE_API_URL}/api/events/${id}`)
+      esRef.current = es
+
+      es.onmessage = (e) => {
+        const evt = JSON.parse(e.data)
+        addEvent(evt)
+
+        if (evt.type === "intro_start")  setIntroBloques(new Array(evt.data.total).fill(""))
+        if (evt.type === "intro_ready") {
+          setIntroAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+          setIntroBloques(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        }
+        if (evt.type === "intro_review_start") { setReviewSection("intro"); setJobStatus("awaiting_review"); setTab("review") }
+        if (evt.type === "intro_review_done")  setReviewSection(null)
+
+        if (evt.type === "afirm_start") setAfirmaciones(new Array(evt.data.total).fill(""))
+        if (evt.type === "afirm_ready") {
+          setAfirmAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+          setAfirmaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        }
+        if (evt.type === "afirm_review_start") { setReviewSection("afirm"); setJobStatus("awaiting_review"); setTab("review") }
+        if (evt.type === "afirm_review_done")  setReviewSection(null)
+
+        if (evt.type === "medit_start") setMeditaciones(new Array(evt.data.total).fill(""))
+        if (evt.type === "medit_ready") {
+          setMeditAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+          setMeditaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        }
+        if (evt.type === "medit_review_start") { setReviewSection("medit"); setJobStatus("awaiting_review"); setTab("review") }
+        if (evt.type === "medit_review_done")  setReviewSection(null)
+
+        if (evt.type === "building") { setJobStatus("building"); setTab("progress") }
+        if (evt.type === "done") {
+          setDownloadUrl(`${import.meta.env.VITE_API_URL}${evt.data.download_url}`)
+          setDurationMins(evt.data.duration_mins)
+          setJobStatus("done")
+          setGenerating(false)
+          setTab("progress")
+          es.close()
+        }
+        if (evt.type === "error") {
+          setJobStatus("error")
+          setGenerating(false)
+          es.close()
+        }
+      }
+      es.onerror = () => { es.close(); setGenerating(false) }
+    } catch (err) {
+      alert("Error conectando al backend: " + err.message)
+      setGenerating(false)
+    }
+  }
+
+  const submitDecision = async (section, index, decision, newText = null) => {
+    if (section === "intro") {
+      setIntroDecisions(prev => ({ ...prev, [index]: decision }))
+      if (newText && decision === "regenerate")
+        setIntroBloques(prev => { const u = [...prev]; u[index] = newText; return u })
+    } else if (section === "afirm") {
+      setAfirmDecisions(prev => ({ ...prev, [index]: decision }))
+      if (newText && decision === "regenerate")
+        setAfirmaciones(prev => { const u = [...prev]; u[index] = newText; return u })
+    } else {
+      setMeditDecisions(prev => ({ ...prev, [index]: decision }))
+      if (newText && decision === "regenerate")
+        setMeditaciones(prev => { const u = [...prev]; u[index] = newText; return u })
+    }
+    await fetch(`${import.meta.env.VITE_API_URL}/api/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, section, index, decision, new_text: newText || null }),
+    })
+  }
+
+  const finalizeSection = async (section) => {
+    const items     = section === "intro" ? introBloques : section === "afirm" ? afirmaciones : meditaciones
+    const decisions = section === "intro" ? introDecisions : section === "afirm" ? afirmDecisions : meditDecisions
+    for (let i = 0; i < items.length; i++) {
+      if (!decisions[i]) await submitDecision(section, i, "ok")
+    }
+    await fetch(`${import.meta.env.VITE_API_URL}/api/finalize/${jobId}/${section}`, { method: "POST" })
+    setJobStatus("running")
+    setTab("progress")
+  }
+
+  const pendingIntro = introBloques.filter((_, i) => !introDecisions[i]).length
+  const pendingAfirm = afirmaciones.filter((_, i) => !afirmDecisions[i]).length
+  const pendingMedit = meditaciones.filter((_, i) => !meditDecisions[i]).length
+  const reviewBadge  = jobStatus === "awaiting_review"
+    ? (reviewSection === "intro" ? pendingIntro : reviewSection === "afirm" ? pendingAfirm : pendingMedit) || null
+    : null
+
+  return (
+    <div className="module-page fade-up">
+      {/* Navegación interna del módulo */}
+      <nav className="module-nav">
+        {TABS.map(({ id, label }) => {
+          const badge = id === "progress" && generating ? "●"
+                      : id === "review"   && reviewBadge ? reviewBadge
+                      : null
+          return (
+            <button
+              key={id}
+              className={`nav-btn ${tab === id ? "active" : ""}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+              {badge && <span className="nav-badge">{badge}</span>}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Contenido */}
+      <div className="module-content">
+        {tab === "editor" && (
+          <div className="editor-layout">
+            <ScriptEditor
+              guion={guion} setGuion={setGuion}
+              nombre={nombre} setNombre={setNombre}
+              onGenerate={startGeneration}
+              generating={generating}
+            />
+            <ConfigPanel config={config} setConfig={saveConfig} />
+          </div>
+        )}
+
+        {tab === "progress" && (
+          <GenerationProgress
+            events={events}
+            jobStatus={jobStatus}
+            downloadUrl={downloadUrl}
+            durationMins={durationMins}
+            reviewSection={reviewSection}
+            onGoReview={() => setTab("review")}
+            pendingReview={reviewSection === "intro" ? pendingIntro : pendingAfirm}
+          />
+        )}
+
+        {tab === "review" && (
+          <ReviewPanel
+            reviewSection={reviewSection}
+            introBloques={introBloques} introAudios={introAudios} introDecisions={introDecisions}
+            afirmaciones={afirmaciones} afirmAudios={afirmAudios} afirmDecisions={afirmDecisions}
+            meditaciones={meditaciones} meditAudios={meditAudios} meditDecisions={meditDecisions}
+            onDecision={submitDecision}
+            onFinalize={finalizeSection}
+            jobStatus={jobStatus}
+          />
+        )}
+
+        {tab === "history" && <HistoryPanel />}
+      </div>
+    </div>
+  )
+}

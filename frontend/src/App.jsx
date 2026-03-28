@@ -1,364 +1,210 @@
-import { useState, useEffect, useRef, useCallback } from "react"
-import ConfigPanel from "./components/ConfigPanel"
-import ScriptEditor from "./components/ScriptEditor"
-import GenerationProgress from "./components/GenerationProgress"
-import ReviewPanel from "./components/ReviewPanel"
-import HistoryPanel from "./components/HistoryPanel"
-import "./App.css"
+import { useState, useEffect } from "react"
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom"
+import Landing from "./pages/Landing"
+import StudioLanding from "./pages/StudioLanding"
+import LandingHome      from "./pages/landing/Home"
+import LandingNosotros  from "./pages/landing/Nosotros"
+import LandingCanal     from "./pages/landing/Canal"
+import LandingContenido from "./pages/landing/Contenido"
+import LandingComunidad from "./pages/landing/Comunidad"
+import ModuleHub from "./components/ModuleHub"
+import GuionesModule from "./modules/guiones"
+import modules from "./modules/registry"
 import logoImg from "./assets/logo.png"
+import "./App.css"
 
-const DEFAULT_CONFIG = {
-  api_key: "",
-  voice_id: "0ZflTCV1dnNGRdqxOiW6",
-  model_id: "eleven_multilingual_v2",
-  language_code: "es",
-  voice_settings: {
-    stability: 0.45,
-    similarity_boost: 0.95,
-    style: 0.01,
-    use_speaker_boost: true,
-  },
-  intro_voice_speed: 1.0,
-  intro_tempo_factor: 0.98,
-  afirm_voice_speed: 0.94,
-  afirm_tempo_factor: 0.95,
-  medit_voice_speed: 0.9,
-  medit_tempo_factor: 0.9,
-  pausa_entre_oraciones: 400,
-  pausa_entre_afirmaciones: 10000,
-  pausa_intro_a_afirm: 2000,
-  pausa_afirm_a_medit: 3000,
-  pausa_entre_meditaciones: 5000,
-  usar_ssml_breaks: true,
-  break_coma: 0.5,
-  break_punto: 0.7,
-  break_suspensivos: 0.8,
-  break_dos_puntos: 0.4,
-  break_punto_coma: 0.6,
-  break_guion: 0.5,
-  break_exclamacion: 0.7,
-  break_interrogacion: 0.7,
-  break_parrafo: 1.0,
-  extend_silence: false,
-  factor_coma: 1.0,
-  factor_punto: 1.2,
-  factor_suspensivos: 1.5,
-  silence_thresh_db: -40,
-  silence_min_ms: 80,
-  max_chars_parrafo: 270,
+/* ── Inline SVG icons ────────────────────────────────────────── */
+const IconGrid = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+  </svg>
+)
+const IconWave = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M2 12h2.5M19.5 12H22M6.5 7v10M10 4v16M13.5 7v10M17 4v16"/>
+  </svg>
+)
+const IconImage = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+    <path d="m21 15-5-5L5 21"/>
+  </svg>
+)
+const IconLoop = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+    <path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+  </svg>
+)
+const IconMonitor = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+  </svg>
+)
+const IconChevron = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M9 18l6-6-6-6"/>
+  </svg>
+)
+const IconMenu = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M3 12h18M3 6h18M3 18h18"/>
+  </svg>
+)
+const IconCollapse = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M11 19l-7-7 7-7M21 19l-7-7 7-7"/>
+  </svg>
+)
+const IconExpand = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M13 5l7 7-7 7M3 5l7 7-7 7"/>
+  </svg>
+)
+
+const MODULE_ICONS = {
+  guiones:    IconWave,
+  miniaturas: IconMonitor,
+  bucles:     IconLoop,
+  imagenes:   IconImage,
 }
 
-export default function App() {
-  const [tab, setTab] = useState("editor")
-  const [config, setConfig] = useState(() => {
-    try {
-      const saved = localStorage.getItem("medi_config")
-      return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG
-    } catch { return DEFAULT_CONFIG }
-  })
-  const [guion, setGuion] = useState("")
-  const [nombre, setNombre] = useState("meditacion")
-  const [jobId, setJobId] = useState(null)
-  const [jobStatus, setJobStatus] = useState(null)
-  const [events, setEvents] = useState([])
-
-  // — Intro review state —
-  const [introBloques, setIntroBloques] = useState([])
-  const [introAudios, setIntroAudios] = useState({})
-  const [introDecisions, setIntroDecisions] = useState({})
-
-  // — Afirm review state —
-  const [afirmaciones, setAfirmaciones] = useState([])
-  const [afirmAudios, setAfirmAudios] = useState({})
-  const [afirmDecisions, setAfirmDecisions] = useState({})
-
-  // — Medit review state —
-  const [meditaciones, setMeditaciones] = useState([])
-  const [meditAudios, setMeditAudios] = useState({})
-  const [meditDecisions, setMeditDecisions] = useState({})
-
-  // — Which section is currently under review —
-  const [reviewSection, setReviewSection] = useState(null) // "intro" | "afirm" | "medit" | null
-
-  const [downloadUrl, setDownloadUrl] = useState(null)
-  const [durationMins, setDurationMins] = useState(null)
-  const [generating, setGenerating] = useState(false)
-  const esRef = useRef(null)
+/* ── Shell ───────────────────────────────────────────────────── */
+function Shell() {
+  const navigate   = useNavigate()
+  const location   = useLocation()
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem("medi_config", JSON.stringify(config))
-  }, [config])
-
-  const addEvent = useCallback((evt) => {
-    setEvents(prev => [...prev, { ...evt, ts: Date.now() }])
+    document.body.classList.add("dashboard-body")
+    return () => document.body.classList.remove("dashboard-body")
   }, [])
 
-  const startGeneration = async () => {
-    if (!config.api_key) return alert("Ingresa tu API Key de ElevenLabs")
-    if (!guion.trim()) return alert("El guion está vacío")
+  const isHub      = location.pathname === "/studio" || location.pathname === "/studio/"
+  const activeMod  = modules.find(m => location.pathname.startsWith(m.path))
 
-    setGenerating(true)
-    setEvents([])
-    setIntroBloques([])
-    setIntroAudios({})
-    setIntroDecisions({})
-    setAfirmaciones([])
-    setAfirmAudios({})
-    setAfirmDecisions({})
-    setMeditaciones([])
-    setMeditAudios({})
-    setMeditDecisions({})
-    setReviewSection(null)
-    setDownloadUrl(null)
-    setDurationMins(null)
-    setJobStatus("starting")
+  const breadcrumbs = [
+    { label: "Dashboard", path: "/studio" },
+    ...(activeMod ? [{ label: activeMod.name, path: activeMod.path }] : []),
+  ]
 
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guion, config, nombre }),
-      })
-      const data = await res.json()
-      const id = data.job_id
-      setJobId(id)
-      setTab("progress")
-
-      if (esRef.current) esRef.current.close()
-      const es = new EventSource(`${import.meta.env.VITE_API_URL}/api/events/${id}`)
-      esRef.current = es
-
-      es.onmessage = (e) => {
-        const evt = JSON.parse(e.data)
-        addEvent(evt)
-
-        // — Intro events —
-        if (evt.type === "intro_start") {
-          setIntroBloques(new Array(evt.data.total).fill(""))
-        }
-        if (evt.type === "intro_ready") {
-          setIntroAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setIntroBloques(prev => {
-            const updated = [...prev]
-            updated[evt.data.index] = evt.data.text
-            return updated
-          })
-        }
-        if (evt.type === "intro_review_start") {
-          setReviewSection("intro")
-          setJobStatus("awaiting_review")
-          setTab("review")
-        }
-        if (evt.type === "intro_review_done") {
-          setReviewSection(null)
-        }
-
-        // — Afirm events —
-        if (evt.type === "afirm_start") {
-          setAfirmaciones(new Array(evt.data.total).fill(""))
-        }
-        if (evt.type === "afirm_ready") {
-          setAfirmAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setAfirmaciones(prev => {
-            const updated = [...prev]
-            updated[evt.data.index] = evt.data.text
-            return updated
-          })
-        }
-        if (evt.type === "afirm_review_start") {
-          setReviewSection("afirm")
-          setJobStatus("awaiting_review")
-          setTab("review")
-        }
-        if (evt.type === "afirm_review_done") {
-          setReviewSection(null)
-        }
-
-        // — Medit events —
-        if (evt.type === "medit_start") {
-          setMeditaciones(new Array(evt.data.total).fill(""))
-        }
-        if (evt.type === "medit_ready") {
-          setMeditAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setMeditaciones(prev => {
-            const updated = [...prev]
-            updated[evt.data.index] = evt.data.text
-            return updated
-          })
-        }
-        if (evt.type === "medit_review_start") {
-          setReviewSection("medit")
-          setJobStatus("awaiting_review")
-          setTab("review")
-        }
-        if (evt.type === "medit_review_done") {
-          setReviewSection(null)
-        }
-
-        // — Final —
-        if (evt.type === "building") {
-          setJobStatus("building")
-          setTab("progress")
-        }
-        if (evt.type === "done") {
-          setDownloadUrl(`${import.meta.env.VITE_API_URL}${evt.data.download_url}`)
-          setDurationMins(evt.data.duration_mins)
-          setJobStatus("done")
-          setGenerating(false)
-          setTab("progress")
-          es.close()
-        }
-        if (evt.type === "error") {
-          setJobStatus("error")
-          setGenerating(false)
-          es.close()
-        }
-      }
-      es.onerror = () => { es.close(); setGenerating(false) }
-    } catch (err) {
-      alert("Error conectando al backend: " + err.message)
-      setGenerating(false)
-    }
-  }
-
-  // Envía una decisión para cualquier sección
-  // newText: texto editado (opcional, sólo cuando se regenera con texto nuevo)
-  const submitDecision = async (section, index, decision, newText = null) => {
-    if (section === "intro") {
-      setIntroDecisions(prev => ({ ...prev, [index]: decision }))
-      if (newText && decision === "regenerate") {
-        setIntroBloques(prev => {
-          const updated = [...prev]
-          updated[index] = newText
-          return updated
-        })
-      }
-    } else if (section === "afirm") {
-      setAfirmDecisions(prev => ({ ...prev, [index]: decision }))
-      if (newText && decision === "regenerate") {
-        setAfirmaciones(prev => {
-          const updated = [...prev]
-          updated[index] = newText
-          return updated
-        })
-      }
-    } else {
-      setMeditDecisions(prev => ({ ...prev, [index]: decision }))
-      if (newText && decision === "regenerate") {
-        setMeditaciones(prev => {
-          const updated = [...prev]
-          updated[index] = newText
-          return updated
-        })
-      }
-    }
-    await fetch(`${import.meta.env.VITE_API_URL}/api/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId, section, index, decision, new_text: newText || null }),
-    })
-  }
-
-  // Finaliza la revisión de la sección activa
-  const finalizeSection = async (section) => {
-    // Aprobar automáticamente los que quedaron sin decisión
-    const items     = section === "intro" ? introBloques : section === "afirm" ? afirmaciones : meditaciones
-    const decisions = section === "intro" ? introDecisions : section === "afirm" ? afirmDecisions : meditDecisions
-    for (let i = 0; i < items.length; i++) {
-      if (!decisions[i]) await submitDecision(section, i, "ok")
-    }
-    await fetch(`${import.meta.env.VITE_API_URL}/api/finalize/${jobId}/${section}`, {
-      method: "POST"
-    })
-    setJobStatus("running")
-    setTab("progress")
-  }
-
-  // Badge de revisión pendiente
-  const pendingIntro = introBloques.filter((_, i) => !introDecisions[i]).length
-  const pendingAfirm = afirmaciones.filter((_, i) => !afirmDecisions[i]).length
-  const pendingMedit = meditaciones.filter((_, i) => !meditDecisions[i]).length
-  const reviewBadge  = jobStatus === "awaiting_review"
-    ? (reviewSection === "intro" ? pendingIntro : reviewSection === "afirm" ? pendingAfirm : pendingMedit) || null
-    : null
+  const goTo = (path) => { navigate(path); setMobileOpen(false) }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="app-logo">
-          <img src={logoImg} alt="" />
-          <span>INGENIERÍA DE LA MANIFESTACIÓN</span>
+    <div className={`dashboard${collapsed ? " sb-collapsed" : ""}${mobileOpen ? " sb-mobile-open" : ""}`}>
+
+      {/* ══ TOPBAR ══════════════════════════════════════ */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <button className="topbar-menu-btn" onClick={() => setMobileOpen(p => !p)} aria-label="Menú">
+            <IconMenu />
+          </button>
+          <nav className="breadcrumb" aria-label="Navegación">
+            {breadcrumbs.map((c, i) => (
+              <span key={c.path} className="bc-item">
+                {i > 0 && <span className="bc-sep"><IconChevron /></span>}
+                {i < breadcrumbs.length - 1
+                  ? <button className="bc-link" onClick={() => goTo(c.path)}>{c.label}</button>
+                  : <span className="bc-current">{c.label}</span>
+                }
+              </span>
+            ))}
+          </nav>
         </div>
-        <nav className="app-nav">
-          {[
-            { id: "editor",   label: "Guion" },
-            { id: "progress", label: "Progreso", badge: generating ? "●" : null },
-            { id: "review",   label: "Revisión", badge: reviewBadge },
-            { id: "history",  label: "Historial" },
-          ].map(({ id, label, badge }) => (
-            <button
-              key={id}
-              className={`nav-btn ${tab === id ? "active" : ""}`}
-              onClick={() => setTab(id)}
-            >
-              {label}
-              {badge && <span className="nav-badge">{badge}</span>}
-            </button>
-          ))}
-        </nav>
+        <div className="topbar-right">
+          <span className="topbar-badge">v3.0</span>
+          <div className="topbar-status">
+            <span className="topbar-dot" />
+            <span className="topbar-status-label">En línea</span>
+          </div>
+        </div>
       </header>
 
-      <main className="app-main">
-        {tab === "editor" && (
-          <div className="editor-layout">
-            <ScriptEditor
-              guion={guion}
-              setGuion={setGuion}
-              nombre={nombre}
-              setNombre={setNombre}
-              onGenerate={startGeneration}
-              generating={generating}
-            />
-            <ConfigPanel config={config} setConfig={setConfig} />
+      {/* ══ SIDEBAR ═════════════════════════════════════ */}
+      <aside className="sidebar">
+        {/* Brand */}
+        <div className="sb-brand" onClick={() => goTo("/studio")} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && goTo("/studio")}>
+          <img src={logoImg} className="sb-logo" alt="Logo" />
+          <div className="sb-brand-text">
+            <span className="sb-brand-name">INGENIERIA</span>
+            <span className="sb-brand-sub">Studio</span>
           </div>
-        )}
+        </div>
 
-        {tab === "progress" && (
-          <GenerationProgress
-            events={events}
-            jobStatus={jobStatus}
-            downloadUrl={downloadUrl}
-            durationMins={durationMins}
-            reviewSection={reviewSection}
-            onGoReview={() => setTab("review")}
-            pendingReview={reviewSection === "intro" ? pendingIntro : pendingAfirm}
-          />
-        )}
+        {/* Nav */}
+        <div className="sb-section-label">Navegación</div>
+        <nav className="sb-nav">
+          <button className={`sb-item${isHub ? " active" : ""}`} onClick={() => goTo("/studio")} title="Dashboard">
+            <span className="sb-item-icon"><IconGrid /></span>
+            <span className="sb-item-label">Dashboard</span>
+          </button>
 
-        {tab === "review" && (
-          <ReviewPanel
-            reviewSection={reviewSection}
-            // Intro
-            introBloques={introBloques}
-            introAudios={introAudios}
-            introDecisions={introDecisions}
-            // Afirm
-            afirmaciones={afirmaciones}
-            afirmAudios={afirmAudios}
-            afirmDecisions={afirmDecisions}
-            // Medit
-            meditaciones={meditaciones}
-            meditAudios={meditAudios}
-            meditDecisions={meditDecisions}
-            // Shared
-            onDecision={submitDecision}
-            onFinalize={finalizeSection}
-            jobStatus={jobStatus}
-          />
-        )}
+          <div className="sb-section-label sb-section-label--modules">Módulos</div>
 
-        {tab === "history" && <HistoryPanel />}
+          {modules.map(mod => {
+            const Icon    = MODULE_ICONS[mod.id] || IconGrid
+            const isActive = location.pathname.startsWith(mod.path)
+            const isSoon  = mod.status === "coming-soon"
+            return (
+              <button
+                key={mod.id}
+                className={`sb-item${isActive ? " active" : ""}${isSoon ? " sb-item--soon" : ""}`}
+                onClick={() => !isSoon && goTo(mod.path)}
+                title={isSoon ? `${mod.name} — Próximamente` : mod.name}
+                aria-disabled={isSoon}
+              >
+                <span className="sb-item-icon"><Icon /></span>
+                <span className="sb-item-label">{mod.name}</span>
+                {isSoon && <span className="sb-soon-badge">Soon</span>}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Collapse toggle */}
+        <button className="sb-collapse-btn" onClick={() => setCollapsed(p => !p)} aria-label="Colapsar sidebar">
+          {collapsed ? <IconExpand /> : <IconCollapse />}
+          <span className="sb-item-label">Colapsar</span>
+        </button>
+
+        {/* Footer */}
+        <div className="sb-footer">
+          <span className="sb-footer-text">Ingeniería de la Manifestación</span>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {mobileOpen && <div className="sb-overlay" onClick={() => setMobileOpen(false)} />}
+
+      {/* ══ CONTENT ═════════════════════════════════════ */}
+      <main className="dash-content">
+        <Routes>
+          <Route index                  element={<ModuleHub />} />
+          <Route path="guiones/*"       element={<GuionesModule />} />
+        </Routes>
       </main>
+
     </div>
   )
 }
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<StudioLanding />} />
+        <Route path="/portafolio" element={<Landing />}>
+          <Route index                    element={<LandingHome />}      />
+          <Route path="nosotros"          element={<LandingNosotros />}  />
+          <Route path="canal"             element={<LandingCanal />}     />
+          <Route path="contenido"         element={<LandingContenido />} />
+          <Route path="comunidad"         element={<LandingComunidad />} />
+        </Route>
+        <Route path="/studio/*" element={<Shell />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+

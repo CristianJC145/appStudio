@@ -1,4 +1,4 @@
-import logo from "../assets/logo.png"
+import logo from "../../../assets/logo.png"
 
 export default function ScriptEditor({ guion, setGuion, nombre, setNombre, onGenerate, generating }) {
   const charCount = guion.length

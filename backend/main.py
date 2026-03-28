@@ -442,20 +442,45 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
 
 def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
     """
-    Para afirmaciones: cada línea es un bloque independiente (nunca se fusionan).
-    Solo divide las líneas que superen max_chars para no sobrecargar la API.
-    Así se preserva la pausa de 10 s entre cada afirmación en el audio final.
+    Para afirmaciones: igual que _construir_bloques pero trata cada línea
+    como unidad (no párrafos separados por línea en blanco).
+    - Fusiona líneas cortas hasta alcanzar min_chars (evita fallos en la API).
+    - Divide líneas largas que superen max_chars.
+    - Las pausas de 10 s se aplican entre los bloques resultantes.
     """
-    bloques: list[str] = []
-    for linea in texto.splitlines():
-        linea = linea.strip()
-        if not linea:
-            continue
-        if len(linea) <= cfg.max_chars_parrafo:
-            bloques.append(linea)
+    lineas = [l.strip() for l in texto.splitlines() if l.strip()]
+
+    # 1. Fusionar líneas cortas
+    fusionados: list[str] = []
+    buffer = ""
+    for linea in lineas:
+        if not buffer:
+            buffer = linea
+        elif len(buffer) < cfg.min_chars_parrafo:
+            candidato = buffer + "\n\n" + linea
+            if len(candidato) <= cfg.max_chars_parrafo:
+                buffer = candidato
+            else:
+                fusionados.append(buffer)
+                buffer = linea
         else:
-            # Línea demasiado larga: dividir por oraciones
-            oraciones = re.split(r'(?<=[.!?])\s+', linea)
+            fusionados.append(buffer)
+            buffer = linea
+    if buffer:
+        if (fusionados
+                and len(buffer) < cfg.min_chars_parrafo
+                and len(fusionados[-1]) + 1 + len(buffer) <= cfg.max_chars_parrafo):
+            fusionados[-1] = fusionados[-1] + "\n\n" + buffer
+        else:
+            fusionados.append(buffer)
+
+    # 2. Dividir bloques que superen max_chars por oraciones
+    bloques: list[str] = []
+    for bloque in fusionados:
+        if len(bloque) <= cfg.max_chars_parrafo:
+            bloques.append(bloque)
+        else:
+            oraciones = re.split(r'(?<=[.!?])\s+', bloque)
             bloque_actual = ""
             for oracion in oraciones:
                 if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
@@ -466,6 +491,7 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
                     bloque_actual = oracion
             if bloque_actual:
                 bloques.append(bloque_actual)
+
     return bloques
 
 

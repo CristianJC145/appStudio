@@ -787,19 +787,22 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 .ap-progress {
   width: 100%;
-  height: 4px;
-  background: var(--border-mid);
-  border-radius: 2px;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
   cursor: pointer;
   position: relative;
 }
 
+.ap-progress:hover { height: 8px; }
+
 .ap-progress-fill {
   height: 100%;
-  background: var(--violet2);
-  border-radius: 2px;
-  transition: width 0.1s linear;
+  background: var(--violet2, #9370db);
+  border-radius: 3px;
+  transition: width 0.15s linear;
   pointer-events: none;
+  min-width: 3px;
 }
 
 .ap-controls {

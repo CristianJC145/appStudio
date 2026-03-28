@@ -4,19 +4,61 @@ import { useState, useEffect, useRef } from "react"
 //  Player de audio con controles de salto
 // ─────────────────────────────────────────────────────────────
 function AudioPlayer({ src }) {
-  const audioRef = useRef(null)
-  const [playing, setPlaying]   = useState(false)
-  const [current, setCurrent]   = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [speed, setSpeed]       = useState(1)
+  const audioRef               = useRef(null)
+  const durRef                 = useRef(0)       // ref para evitar NaN en skip
+  const [playing, setPlaying]  = useState(false)
+  const [current, setCurrent]  = useState(0)
+  const [duration, setDuration]= useState(0)
+  const [speed, setSpeed]      = useState(1)
   const SPEEDS = [1, 1.5, 2]
 
   useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+    a.pause()
+    a.currentTime = 0
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
+    durRef.current = 0
     setSpeed(1)
+    a.playbackRate = 1
   }, [src])
+
+  const fmt = (s) => {
+    if (!s || isNaN(s)) return "0:00"
+    const m = Math.floor(s / 60)
+    return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`
+  }
+
+  const toggle = () => {
+    const a = audioRef.current
+    if (!a) return
+    playing ? a.pause() : a.play()
+    setPlaying(p => !p)
+  }
+
+  // Usa durRef para evitar el NaN que reinicia el audio
+  const skip = (secs) => {
+    const a = audioRef.current
+    const dur = durRef.current
+    if (!a || !dur) return
+    a.currentTime = Math.max(0, Math.min(dur, a.currentTime + secs))
+  }
+
+  const onSeek = (e) => {
+    const a = audioRef.current
+    const dur = durRef.current
+    if (!a || !dur) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    a.currentTime = ((e.clientX - rect.left) / rect.width) * dur
+  }
+
+  const onLoaded = (e) => {
+    const dur = e.target.duration
+    durRef.current = dur
+    setDuration(dur)
+  }
 
   const cycleSpeed = () => {
     const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
@@ -24,58 +66,33 @@ function AudioPlayer({ src }) {
     if (audioRef.current) audioRef.current.playbackRate = next
   }
 
-  const fmt = (s) => {
-    const m = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return `${m}:${String(sec).padStart(2, "0")}`
-  }
-
-  const toggle = () => {
-    const a = audioRef.current
-    if (!a) return
-    if (playing) { a.pause() } else { a.play() }
-    setPlaying(!playing)
-  }
-
-  const skip = (secs) => {
-    const a = audioRef.current
-    if (!a) return
-    a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + secs))
-  }
-
-  const onSeek = (e) => {
-    const a = audioRef.current
-    if (!a || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
-    a.currentTime = ratio * duration
-  }
+  const pct = duration ? `${(current / duration) * 100}%` : "0%"
 
   return (
     <div className="audio-player">
       <audio
         ref={audioRef}
         src={src}
+        preload="metadata"
         onTimeUpdate={e => setCurrent(e.target.currentTime)}
-        onLoadedMetadata={e => setDuration(e.target.duration)}
+        onLoadedMetadata={onLoaded}
         onEnded={() => setPlaying(false)}
       />
 
       {/* Barra de progreso */}
       <div className="ap-progress" onClick={onSeek}>
-        <div className="ap-progress-fill"
-             style={{ width: duration ? `${(current / duration) * 100}%` : "0%" }} />
+        <div className="ap-progress-fill" style={{ width: pct }} />
       </div>
 
       {/* Controles */}
       <div className="ap-controls">
-        <button className="ap-btn" onClick={() => skip(-10)} title="−10s">«10</button>
-        <button className="ap-btn" onClick={() => skip(-5)}  title="−5s">«5</button>
+        <button className="ap-btn" onClick={() => skip(-10)}>«10</button>
+        <button className="ap-btn" onClick={() => skip(-5)}>«5</button>
         <button className="ap-btn ap-play" onClick={toggle}>
           {playing ? "▐▐" : "▶"}
         </button>
-        <button className="ap-btn" onClick={() => skip(5)}   title="+5s">5»</button>
-        <button className="ap-btn" onClick={() => skip(10)}  title="+10s">10»</button>
+        <button className="ap-btn" onClick={() => skip(5)}>5»</button>
+        <button className="ap-btn" onClick={() => skip(10)}>10»</button>
         <button className="ap-btn ap-speed" onClick={cycleSpeed}>x{speed}</button>
         <span className="ap-time">{fmt(current)} / {fmt(duration)}</span>
       </div>

@@ -440,6 +440,35 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
     return resultado
 
 
+def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
+    """
+    Para afirmaciones: cada línea es un bloque independiente (nunca se fusionan).
+    Solo divide las líneas que superen max_chars para no sobrecargar la API.
+    Así se preserva la pausa de 10 s entre cada afirmación en el audio final.
+    """
+    bloques: list[str] = []
+    for linea in texto.splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        if len(linea) <= cfg.max_chars_parrafo:
+            bloques.append(linea)
+        else:
+            # Línea demasiado larga: dividir por oraciones
+            oraciones = re.split(r'(?<=[.!?])\s+', linea)
+            bloque_actual = ""
+            for oracion in oraciones:
+                if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
+                    bloque_actual += (" " if bloque_actual else "") + oracion
+                else:
+                    if bloque_actual:
+                        bloques.append(bloque_actual)
+                    bloque_actual = oracion
+            if bloque_actual:
+                bloques.append(bloque_actual)
+    return bloques
+
+
 # =============================================================
 #  JOB DE GENERACIÓN
 # =============================================================
@@ -513,7 +542,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── AFIRMACIONES: generar todos los audios ────────────────────────
         afirmaciones = []
         if tiene_afirm:
-            afirmaciones = _construir_bloques(secciones["afirmaciones"], cfg)
+            afirmaciones = _construir_bloques_afirm(secciones["afirmaciones"], cfg)
             jobs[job_id]["afirmaciones"]    = afirmaciones
             jobs[job_id]["afirm_decisions"] = {}
 

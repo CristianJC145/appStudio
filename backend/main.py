@@ -513,7 +513,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── AFIRMACIONES: generar todos los audios ────────────────────────
         afirmaciones = []
         if tiene_afirm:
-            afirmaciones = [l.strip() for l in secciones["afirmaciones"].splitlines() if l.strip()]
+            afirmaciones = _construir_bloques(secciones["afirmaciones"], cfg)
             jobs[job_id]["afirmaciones"]    = afirmaciones
             jobs[job_id]["afirm_decisions"] = {}
 

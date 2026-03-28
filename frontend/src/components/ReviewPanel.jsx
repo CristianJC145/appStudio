@@ -1,6 +1,79 @@
 import { useState, useEffect, useRef } from "react"
 
 // ─────────────────────────────────────────────────────────────
+//  Player de audio con controles de salto
+// ─────────────────────────────────────────────────────────────
+function AudioPlayer({ src }) {
+  const audioRef = useRef(null)
+  const [playing, setPlaying]   = useState(false)
+  const [current, setCurrent]   = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  useEffect(() => {
+    setPlaying(false)
+    setCurrent(0)
+    setDuration(0)
+  }, [src])
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${String(sec).padStart(2, "0")}`
+  }
+
+  const toggle = () => {
+    const a = audioRef.current
+    if (!a) return
+    if (playing) { a.pause() } else { a.play() }
+    setPlaying(!playing)
+  }
+
+  const skip = (secs) => {
+    const a = audioRef.current
+    if (!a) return
+    a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + secs))
+  }
+
+  const onSeek = (e) => {
+    const a = audioRef.current
+    if (!a || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    a.currentTime = ratio * duration
+  }
+
+  return (
+    <div className="audio-player">
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={e => setCurrent(e.target.currentTime)}
+        onLoadedMetadata={e => setDuration(e.target.duration)}
+        onEnded={() => setPlaying(false)}
+      />
+
+      {/* Barra de progreso */}
+      <div className="ap-progress" onClick={onSeek}>
+        <div className="ap-progress-fill"
+             style={{ width: duration ? `${(current / duration) * 100}%` : "0%" }} />
+      </div>
+
+      {/* Controles */}
+      <div className="ap-controls">
+        <button className="ap-btn" onClick={() => skip(-10)} title="−10s">«10</button>
+        <button className="ap-btn" onClick={() => skip(-5)}  title="−5s">«5</button>
+        <button className="ap-btn ap-play" onClick={toggle}>
+          {playing ? "▐▐" : "▶"}
+        </button>
+        <button className="ap-btn" onClick={() => skip(5)}   title="+5s">5»</button>
+        <button className="ap-btn" onClick={() => skip(10)}  title="+10s">10»</button>
+        <span className="ap-time">{fmt(current)} / {fmt(duration)}</span>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Card individual — igual para intro y afirmaciones
 // ─────────────────────────────────────────────────────────────
 function ReviewCard({ section, index, label, text, audioUrl, decision, onDecision }) {
@@ -82,11 +155,7 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
           </div>
         )}
         {audioUrl ? (
-          <audio
-            controls
-            src={`${import.meta.env.VITE_API_URL}${audioUrl}`}
-            style={{ width: "100%", height: 36 }}
-          />
+          <AudioPlayer src={`${import.meta.env.VITE_API_URL}${audioUrl}`} />
         ) : (
           <div className="text-xs text-muted" style={{ padding: "8px 0" }}>
             <span className="pulse">⏳ Generando audio...</span>

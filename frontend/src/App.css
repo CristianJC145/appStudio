@@ -778,6 +778,65 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 .review-card-audio { margin-bottom: 16px; }
 
+/* ── Custom audio player ── */
+.audio-player {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ap-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--border-mid);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+
+.ap-progress-fill {
+  height: 100%;
+  background: var(--violet2);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+
+.ap-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ap-btn {
+  background: var(--bg2);
+  border: 1px solid var(--border-dim);
+  color: var(--text2);
+  border-radius: var(--radius-sm);
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.4;
+}
+
+.ap-btn:hover { background: var(--bg3); color: var(--text1); }
+
+.ap-play {
+  padding: 3px 10px;
+  color: var(--violet2);
+  border-color: var(--border2);
+  min-width: 32px;
+}
+
+.ap-time {
+  margin-left: auto;
+  font-size: 0.70rem;
+  font-family: var(--font-mono);
+  color: var(--text3);
+}
+
 .regen-badge {
   display: flex;
   align-items: center;

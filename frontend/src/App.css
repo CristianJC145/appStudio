@@ -830,6 +830,12 @@ input[type="range"]:hover::-webkit-slider-thumb {
   min-width: 32px;
 }
 
+.ap-speed {
+  color: var(--gold4);
+  border-color: rgba(212,168,67,0.25);
+  min-width: 36px;
+}
+
 .ap-time {
   margin-left: auto;
   font-size: 0.70rem;

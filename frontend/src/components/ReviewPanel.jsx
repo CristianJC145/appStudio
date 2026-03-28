@@ -8,12 +8,21 @@ function AudioPlayer({ src }) {
   const [playing, setPlaying]   = useState(false)
   const [current, setCurrent]   = useState(0)
   const [duration, setDuration] = useState(0)
+  const [speed, setSpeed]       = useState(1)
+  const SPEEDS = [1, 1.5, 2]
 
   useEffect(() => {
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
+    setSpeed(1)
   }, [src])
+
+  const cycleSpeed = () => {
+    const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
+    setSpeed(next)
+    if (audioRef.current) audioRef.current.playbackRate = next
+  }
 
   const fmt = (s) => {
     const m = Math.floor(s / 60)
@@ -67,6 +76,7 @@ function AudioPlayer({ src }) {
         </button>
         <button className="ap-btn" onClick={() => skip(5)}   title="+5s">5»</button>
         <button className="ap-btn" onClick={() => skip(10)}  title="+10s">10»</button>
+        <button className="ap-btn ap-speed" onClick={cycleSpeed}>x{speed}</button>
         <span className="ap-time">{fmt(current)} / {fmt(duration)}</span>
       </div>
     </div>
@@ -114,8 +124,8 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         )}
       </div>
 
-      <div className="review-card-text">
-        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/\s+/g, " ").trim()}
+      <div className="review-card-text" style={{ whiteSpace: "pre-wrap" }}>
+        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/[ \t]+/g, " ").replace(/\n /g, "\n").trim()}
       </div>
 
       {editing && (

@@ -311,7 +311,7 @@ def _guardar_preview(audio: "AudioSegment", job_id: str,
     """Exporta el audio procesado a un WAV de preview y devuelve la URL."""
     path = CARPETA_TEMP / f"preview_{job_id}_{section}_{index}.wav"
     audio.export(str(path), format="wav")
-    return f"/api/preview/{job_id}/{section}/{index}"
+    return f"/api/preview/{job_id}/{section}/{index}?t={int(time.time())}"
 
 def _esperar_revision(job_id: str, section: str, items: list[str],
                       carpeta: Path, prefijo: str,

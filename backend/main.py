@@ -442,22 +442,23 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
 
 def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
     """
-    Para afirmaciones: igual que _construir_bloques pero trata cada línea
-    como unidad (no párrafos separados por línea en blanco).
+    Para afirmaciones: trata cada línea como unidad.
     - Fusiona líneas cortas hasta alcanzar min_chars (evita fallos en la API).
+    - Al fusionar, inserta un <break time="Xs"/> con el valor de pausa_entre_afirmaciones
+      para que el TTS respete los 10 s entre afirmaciones incluso dentro del mismo bloque.
     - Divide líneas largas que superen max_chars.
-    - Las pausas de 10 s se aplican entre los bloques resultantes.
     """
+    sep = f'<break time="{cfg.pausa_entre_afirmaciones / 1000:.1f}s"/>'
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
 
-    # 1. Fusionar líneas cortas
+    # 1. Fusionar líneas cortas usando el break de afirmaciones como separador
     fusionados: list[str] = []
     buffer = ""
     for linea in lineas:
         if not buffer:
             buffer = linea
         elif len(buffer) < cfg.min_chars_parrafo:
-            candidato = buffer + "\n\n" + linea
+            candidato = buffer + " " + sep + " " + linea
             if len(candidato) <= cfg.max_chars_parrafo:
                 buffer = candidato
             else:
@@ -469,8 +470,8 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
     if buffer:
         if (fusionados
                 and len(buffer) < cfg.min_chars_parrafo
-                and len(fusionados[-1]) + 1 + len(buffer) <= cfg.max_chars_parrafo):
-            fusionados[-1] = fusionados[-1] + "\n\n" + buffer
+                and len(fusionados[-1]) + len(sep) + 2 + len(buffer) <= cfg.max_chars_parrafo):
+            fusionados[-1] = fusionados[-1] + " " + sep + " " + buffer
         else:
             fusionados.append(buffer)
 

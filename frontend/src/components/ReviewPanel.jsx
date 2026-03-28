@@ -41,7 +41,9 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         )}
       </div>
 
-      <div className="review-card-text">{text || "…"}</div>
+      <div className="review-card-text">
+        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/\s+/g, " ").trim()}
+      </div>
 
       {editing && (
         <div style={{ marginBottom: 8 }}>

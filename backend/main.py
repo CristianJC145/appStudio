@@ -229,6 +229,9 @@ def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
         # Caso: "texto\n\n" sin break previo → "texto <break 1.0s/>\n\n"
         t = re.sub(r'(?<!/>)([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
 
+    # Eliminar breaks sobrantes al final del texto
+    t = re.sub(r'(\s*<break time="[\d.]+s"/>)+\s*$', '', t).strip()
+
     return t
 
 
@@ -440,15 +443,27 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
     return resultado
 
 
+def _break_largo(ms: int, max_s: float = 3.0) -> str:
+    """Convierte ms a una serie de <break/> de máximo max_s segundos cada uno."""
+    restante = ms / 1000
+    partes = []
+    while restante > max_s:
+        partes.append(f'<break time="{max_s:.1f}s"/>')
+        restante -= max_s
+    if restante > 0:
+        partes.append(f'<break time="{restante:.1f}s"/>')
+    return ' '.join(partes)
+
+
 def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
     """
     Para afirmaciones: trata cada línea como unidad.
     - Fusiona líneas cortas hasta alcanzar min_chars (evita fallos en la API).
-    - Al fusionar, inserta un <break time="Xs"/> con el valor de pausa_entre_afirmaciones
-      para que el TTS respete los 10 s entre afirmaciones incluso dentro del mismo bloque.
+    - Al fusionar, inserta breaks que sumen pausa_entre_afirmaciones en tramos de
+      máx 3 s (límite de ElevenLabs) para preservar los 10 s entre afirmaciones.
     - Divide líneas largas que superen max_chars.
     """
-    sep = f'<break time="{cfg.pausa_entre_afirmaciones / 1000:.1f}s"/>'
+    sep = _break_largo(cfg.pausa_entre_afirmaciones)
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
 
     # 1. Fusionar líneas cortas usando el break de afirmaciones como separador

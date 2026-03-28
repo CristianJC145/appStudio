@@ -1,12 +1,21 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 
 // ─────────────────────────────────────────────────────────────
 //  Card individual — igual para intro y afirmaciones
 // ─────────────────────────────────────────────────────────────
 function ReviewCard({ section, index, label, text, audioUrl, decision, onDecision }) {
-  const [editing, setEditing]     = useState(false)
+  const [editing, setEditing]       = useState(false)
   const [editedText, setEditedText] = useState("")
+  const [isRegenerated, setIsRegenerated] = useState(false)
+  const prevAudioUrl = useRef(null)
   const cardClass = decision ? `decided-${decision}` : ""
+
+  useEffect(() => {
+    if (audioUrl && prevAudioUrl.current && audioUrl !== prevAudioUrl.current) {
+      setIsRegenerated(true)
+    }
+    prevAudioUrl.current = audioUrl
+  }, [audioUrl])
 
   const cancelEdit = () => setEditing(false)
 
@@ -65,6 +74,11 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
       )}
 
       <div className="review-card-audio">
+        {isRegenerated && (
+          <div className="regen-badge">
+            <span>✦ Audio regenerado</span>
+          </div>
+        )}
         {audioUrl ? (
           <audio
             controls
@@ -81,21 +95,21 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
       <div className="review-card-actions">
         <button
           className={`btn btn-sm ${decision === "ok" ? "btn-success" : "btn-ghost"}`}
-          onClick={() => onDecision(section, index, "ok")}
+          onClick={() => { onDecision(section, index, "ok"); setIsRegenerated(false) }}
           disabled={!audioUrl}
         >
           ✓ Aprobar
         </button>
         <button
           className={`btn btn-sm ${decision === "regenerate" ? "btn-secondary" : "btn-ghost"}`}
-          onClick={() => onDecision(section, index, "regenerate")}
+          onClick={() => { onDecision(section, index, "regenerate"); setIsRegenerated(false) }}
           disabled={!audioUrl}
         >
           ↺ Regenerar
         </button>
         <button
           className={`btn btn-sm ${decision === "skip" ? "btn-danger" : "btn-ghost"}`}
-          onClick={() => onDecision(section, index, "skip")}
+          onClick={() => { onDecision(section, index, "skip"); setIsRegenerated(false) }}
         >
           — Omitir
         </button>

@@ -68,8 +68,11 @@ const CALIB_LABELS = {
   break_guion:         "Pausa —",
   break_parrafo:       "Pausa Párrafo",
   intro_voice_speed:   "Velocidad Intro",
-  afirm_voice_speed:   "Velocidad Afirmaciones",
   medit_voice_speed:   "Velocidad Meditación",
+  afirm_voice_speed:   "Velocidad Afirmaciones",
+  intro_tempo_factor:  "Tempo Intro",
+  medit_tempo_factor:  "Tempo Meditación",
+  afirm_tempo_factor:  "Tempo Afirmaciones",
 }
 
 const SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]

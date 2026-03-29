@@ -44,6 +44,11 @@ CALIB_DIR.mkdir(parents=True, exist_ok=True)
 
 SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
 
+# Rango "natural" de ElevenLabs: fuera de él el audio suena artificial.
+# Cuando el ritmo objetivo está fuera, se usa tempo para compensar.
+SPEED_NATURAL_MIN = 0.90
+SPEED_NATURAL_MAX = 1.05
+
 # Sin puntuación → mide velocidad pura (sílabas)
 TEXTO_REF_VELOCIDAD = (
     "Siente cómo tu respiración fluye naturalmente con calma y serenidad en cada momento"
@@ -932,6 +937,23 @@ def _load_calib(voice_id: str, model_id: str):
     return None
 
 
+def _ref_interval_at_speed(target_speed: float, points: list) -> float:
+    """Intervalo silábico esperado (ms) a una velocidad dada.
+    Usa baseline/speed — relación hiperbólica real — con el punto speed=1.0
+    como referencia. Si no existe ese punto, interpola linealmente."""
+    baseline_pt = next((p for p in points if abs(p["speed"] - 1.0) < 0.01), None)
+    if baseline_pt:
+        return baseline_pt["med_syl_ms"] / target_speed
+    # Fallback: interpolación lineal entre los dos puntos más cercanos
+    pts = sorted(points, key=lambda p: p["speed"])
+    for i in range(len(pts) - 1):
+        lo, hi = pts[i], pts[i + 1]
+        if lo["speed"] <= target_speed <= hi["speed"]:
+            t = (target_speed - lo["speed"]) / (hi["speed"] - lo["speed"])
+            return lo["med_syl_ms"] + t * (hi["med_syl_ms"] - lo["med_syl_ms"])
+    return pts[0]["med_syl_ms"] if target_speed < pts[0]["speed"] else pts[-1]["med_syl_ms"]
+
+
 def _interpolate_speed(med_syl_ms: float, points: list) -> float:
     """Interpola la velocidad a partir de los puntos de calibración.
     Los puntos están ordenados: mayor med_syl_ms = menor speed."""
@@ -1039,28 +1061,59 @@ def calibrar_voz(body: CalibracionRequest):
         break_interrogacion = round(break_punto, 2)
         break_guion         = round(break_coma, 2)
 
-        # ── Velocidad de voz: timing silábico con calibración de referencia ──
+        # ── Velocidad + Tempo: timing silábico con calibración de referencia ──
+        # La idea: mantener el speed de ElevenLabs en el rango "natural"
+        # (SPEED_NATURAL_MIN – SPEED_NATURAL_MAX) donde la voz suena bien,
+        # y usar el tempo (ffmpeg time-stretch) para alcanzar el ritmo objetivo.
+        # No se necesitan audios de referencia extra: el tempo es lineal sobre
+        # el intervalo silábico, por lo que se calcula directamente.
         total_silencio_ms = sum(end - start for start, end in silencios)
         habla_ms   = max(dur_ms - total_silencio_ms, 0)
         ratio_habla = habla_ms / dur_ms
 
-        # Medir intervalo silábico mediano del audio subido
         med_syl_ms = _medir_silabico_seg(seg, silencios)
-
-        # Cargar tabla de calibración de esta voz si existe
         calib = _load_calib(body.voice_id, body.model_id) if body.voice_id else None
 
         if med_syl_ms > 0:
-            if calib and len(calib.get("points", [])) >= 5:
-                # Interpolación exacta sobre la tabla de referencia
-                speed_base = _interpolate_speed(med_syl_ms, calib["points"])
-            else:
-                # Estimación genérica (sin referencias): baseline 185 ms/sílaba
-                speed_base = 185.0 / med_syl_ms
-        else:
-            speed_base = 0.93  # fallback cuando no hay datos suficientes
+            pts = calib.get("points", []) if calib else []
 
-        speed = round(max(0.70, min(speed_base, 1.20)), 2)
+            if len(pts) >= 5:
+                # Intervalo de referencia en el rango natural
+                ref_at_min = _ref_interval_at_speed(SPEED_NATURAL_MIN, pts)  # ms más lento permitido
+                ref_at_max = _ref_interval_at_speed(SPEED_NATURAL_MAX, pts)  # ms más rápido permitido
+
+                if med_syl_ms >= ref_at_min:
+                    # El audio es MÁS LENTO que SPEED_NATURAL_MIN a tempo=1.
+                    # Fijamos speed=SPEED_NATURAL_MIN y el tempo ralentiza el resto.
+                    speed = SPEED_NATURAL_MIN
+                    tempo = round(ref_at_min / med_syl_ms, 3)
+                elif med_syl_ms <= ref_at_max:
+                    # El audio es MÁS RÁPIDO que SPEED_NATURAL_MAX a tempo=1.
+                    # Fijamos speed=SPEED_NATURAL_MAX y el tempo acelera el resto.
+                    speed = SPEED_NATURAL_MAX
+                    tempo = round(ref_at_max / med_syl_ms, 3)
+                else:
+                    # Dentro del rango natural: solo speed, tempo=1.0
+                    speed = _interpolate_speed(med_syl_ms, pts)
+                    tempo = 1.0
+            else:
+                # Sin tabla de calibración: estimación genérica
+                effective = 185.0 / med_syl_ms
+                if effective < SPEED_NATURAL_MIN:
+                    speed = SPEED_NATURAL_MIN
+                    tempo = round(effective / SPEED_NATURAL_MIN, 3)
+                elif effective > SPEED_NATURAL_MAX:
+                    speed = SPEED_NATURAL_MAX
+                    tempo = round(effective / SPEED_NATURAL_MAX, 3)
+                else:
+                    speed = round(effective, 2)
+                    tempo = 1.0
+        else:
+            speed = 0.93
+            tempo = 1.0
+
+        speed = round(max(0.70, min(speed, 1.20)), 2)
+        tempo = round(max(0.50, min(tempo, 1.50)), 2)
 
         # ── Ajuste de breaks: restar las pausas naturales de la voz ──────────
         # El SSML break = pausa deseada − lo que la voz ya inserta sola.
@@ -1082,27 +1135,32 @@ def calibrar_voz(body: CalibracionRequest):
             break_guion         = round(break_coma,  2)
 
         # Solo se devuelve el parámetro de velocidad de la sección solicitada
-        SPEED_KEY = {
-            "intro":        "intro_voice_speed",
-            "meditacion":   "medit_voice_speed",
-            "afirmaciones": "afirm_voice_speed",
+        SECTION_KEYS = {
+            "intro":        ("intro_voice_speed", "intro_tempo_factor"),
+            "meditacion":   ("medit_voice_speed",  "medit_tempo_factor"),
+            "afirmaciones": ("afirm_voice_speed",  "afirm_tempo_factor"),
         }
-        speed_key = SPEED_KEY.get(body.seccion, "intro_voice_speed")
+        speed_key, tempo_key = SECTION_KEYS.get(body.seccion, ("intro_voice_speed", "intro_tempo_factor"))
+
+        sugerencias = {
+            "break_coma":          break_coma,
+            "break_punto":         break_punto,
+            "break_suspensivos":   break_suspensivos,
+            "break_dos_puntos":    break_dos_puntos,
+            "break_punto_coma":    break_punto_coma,
+            "break_exclamacion":   break_exclamacion,
+            "break_interrogacion": break_interrogacion,
+            "break_guion":         break_guion,
+            "break_parrafo":       break_parrafo,
+            speed_key:             speed,
+        }
+        # Solo incluir tempo si difiere de 1.0 (evitar ruido innecesario)
+        if abs(tempo - 1.0) >= 0.01:
+            sugerencias[tempo_key] = tempo
 
         return {
             "seccion": body.seccion,
-            "sugerencias": {
-                "break_coma":          break_coma,
-                "break_punto":         break_punto,
-                "break_suspensivos":   break_suspensivos,
-                "break_dos_puntos":    break_dos_puntos,
-                "break_punto_coma":    break_punto_coma,
-                "break_exclamacion":   break_exclamacion,
-                "break_interrogacion": break_interrogacion,
-                "break_guion":         break_guion,
-                "break_parrafo":       break_parrafo,
-                speed_key:             speed,
-            },
+            "sugerencias": sugerencias,
             "analisis": {
                 "duracion_s":           round(dur_ms / 1000, 1),
                 "ratio_habla":          round(ratio_habla, 3),

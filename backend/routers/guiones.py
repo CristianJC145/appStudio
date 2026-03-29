@@ -19,7 +19,8 @@ from collections import defaultdict
 
 import statistics
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
+import base64
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -820,10 +821,15 @@ def delete_history(filename: str):
     return {"ok": True}
 
 
+class CalibracionRequest(BaseModel):
+    audio_b64: str          # base64-encoded audio bytes
+    filename: str = "audio.mp3"
+
+
 @router.post("/calibrar-voz")
-async def calibrar_voz(audio: UploadFile = File(...)):
+def calibrar_voz(body: CalibracionRequest):
     """
-    Analiza un audio de referencia y devuelve parámetros de configuración sugeridos.
+    Analiza un audio de referencia enviado como base64 JSON.
     Extrae patrones de silencio → break times SSML
     Extrae ratio habla/silencio → velocidad de voz
     """
@@ -831,13 +837,18 @@ async def calibrar_voz(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="pydub no disponible")
 
     FORMATOS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".webm"}
-    ext = Path(audio.filename or "audio.mp3").suffix.lower()
+    ext = Path(body.filename).suffix.lower()
     if ext not in FORMATOS:
         raise HTTPException(status_code=422, detail=f"Formato no soportado. Usa: {', '.join(FORMATOS)}")
 
+    try:
+        audio_bytes = base64.b64decode(body.audio_b64)
+    except Exception:
+        raise HTTPException(status_code=422, detail="audio_b64 no es base64 válido")
+
     # Guardar en temp
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp.write(await audio.read())
+        tmp.write(audio_bytes)
         tmp_path = tmp.name
 
     try:

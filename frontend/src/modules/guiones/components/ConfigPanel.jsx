@@ -86,15 +86,22 @@ function CalibracionModal({ onClose, onApply }) {
     setEstado("analizando")
     setErrorMsg("")
     try {
-      const fd = new FormData()
-      fd.append("audio", file)
+      // Lee el archivo como base64 para evitar problemas CORS/proxy con multipart
+      const audio_b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve(reader.result.split(",")[1]) // quita "data:...;base64,"
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/calibrar-voz`, {
-        method: "POST", body: fd,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio_b64, filename: file.name }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || "Error al analizar")
       setResultado(data)
-      // Seleccionar todos por defecto
       const todos = {}
       Object.keys(data.sugerencias).forEach(k => { todos[k] = true })
       setSeleccionados(todos)

@@ -100,15 +100,15 @@ function AudioPlayer({ src }) {
 function ReviewCard({ section, index, label, text, audioUrl, decision, onDecision }) {
   const [editing, setEditing]       = useState(false)
   const [editedText, setEditedText] = useState("")
-  const [isRegenerated, setIsRegenerated] = useState(false)
+  const [regenCount, setRegenCount] = useState(0)
   const prevAudioUrl = useRef(null)
   const cardClass = decision ? `decided-${decision}` : ""
 
   useEffect(() => {
-    if (audioUrl && prevAudioUrl.current && audioUrl !== prevAudioUrl.current) {
-      setIsRegenerated(true)
+    if (audioUrl && prevAudioUrl.current !== null && audioUrl !== prevAudioUrl.current) {
+      setRegenCount(c => c + 1)
     }
-    prevAudioUrl.current = audioUrl
+    prevAudioUrl.current = audioUrl ?? null
   }, [audioUrl])
 
   const cancelEdit = () => setEditing(false)
@@ -135,8 +135,14 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         )}
       </div>
 
-      <div className="review-card-text">
-        {(text || "…").replace(/<break[^>]*\/>/g, "").replace(/\s+/g, " ").trim()}
+      <div className="review-card-text" style={{ whiteSpace: "pre-line" }}>
+        {(text || "…")
+          .replace(/<break[^>]*\/>/g, "")
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{2,}/g, "\n")
+          .replace(/ \n/g, "\n")
+          .replace(/\n /g, "\n")
+          .trim()}
       </div>
 
       {editing && (
@@ -170,9 +176,9 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
       )}
 
       <div className="review-card-audio">
-        {isRegenerated && (
-          <div className="regen-badge">
-            <span>✦ Audio regenerado</span>
+        {regenCount > 0 && (
+          <div className="regen-badge" key={regenCount}>
+            <span>✦ Audio regenerado ({regenCount})</span>
           </div>
         )}
         {audioUrl ? (
@@ -187,21 +193,21 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
       <div className="review-card-actions">
         <button
           className={`btn btn-sm ${decision === "ok" ? "btn-success" : "btn-ghost"}`}
-          onClick={() => { onDecision(section, index, "ok"); setIsRegenerated(false) }}
+          onClick={() => { onDecision(section, index, "ok"); setRegenCount(0) }}
           disabled={!audioUrl}
         >
           ✓ Aprobar
         </button>
         <button
           className={`btn btn-sm ${decision === "regenerate" ? "btn-secondary" : "btn-ghost"}`}
-          onClick={() => { onDecision(section, index, "regenerate"); setIsRegenerated(false) }}
+          onClick={() => { onDecision(section, index, "regenerate"); setRegenCount(0) }}
           disabled={!audioUrl}
         >
           ↺ Regenerar
         </button>
         <button
           className={`btn btn-sm ${decision === "skip" ? "btn-danger" : "btn-ghost"}`}
-          onClick={() => { onDecision(section, index, "skip"); setIsRegenerated(false) }}
+          onClick={() => { onDecision(section, index, "skip"); setRegenCount(0) }}
         >
           — Omitir
         </button>

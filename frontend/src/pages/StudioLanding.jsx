@@ -130,9 +130,9 @@ export default function StudioLanding() {
               </div>
 
               <h1 className="sl-hero-title sl-reveal sl-reveal-d1">
-                El estudio<br />
-                <span className="sl-hero-title-accent">detrás del</span><br />
-                contenido
+                Construido<br />
+                <span className="sl-hero-title-accent">por un dev,</span><br />
+                impulsado por IA
               </h1>
 
               <p className="sl-hero-desc sl-reveal sl-reveal-d2">

@@ -66,6 +66,18 @@ class Config(BaseModel):
     pausa_intro_a_afirm: int = 2000
     pausa_afirm_a_medit: int = 3000
     pausa_entre_meditaciones: int = 5000
+    # SSML breaks por puntuación
+    usar_ssml_breaks: bool = True
+    break_coma: float = 0.5
+    break_punto: float = 0.7
+    break_suspensivos: float = 0.8
+    break_dos_puntos: float = 0.4
+    break_punto_coma: float = 0.6
+    break_guion: float = 0.5
+    break_exclamacion: float = 0.7
+    break_interrogacion: float = 0.7
+    break_parrafo: float = 1.0
+    # Post-proceso
     extend_silence: bool = False
     factor_coma: float = 1.0
     factor_punto: float = 1.2
@@ -158,12 +170,64 @@ def extender_silencios_internos(audio: "AudioSegment", cfg: Config) -> "AudioSeg
         resultado += audio[cursor:]
     return resultado
 
+def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
+    if not cfg.usar_ssml_breaks:
+        return texto
+
+    def b(s): return f'<break time="{s}s"/>'
+
+    reglas = []
+    if cfg.break_suspensivos   > 0: reglas.append((r'\.\.\.|\u2026', cfg.break_suspensivos))
+    if cfg.break_guion         > 0: reglas.append((r'---|—',         cfg.break_guion))
+    if cfg.break_coma          > 0: reglas.append((r',',             cfg.break_coma))
+    if cfg.break_punto         > 0: reglas.append((r'\.(?!\d)',      cfg.break_punto))
+    if cfg.break_dos_puntos    > 0: reglas.append((r':(?!//)',       cfg.break_dos_puntos))
+    if cfg.break_punto_coma    > 0: reglas.append((r';',             cfg.break_punto_coma))
+    if cfg.break_exclamacion   > 0: reglas.append((r'!',             cfg.break_exclamacion))
+    if cfg.break_interrogacion > 0: reglas.append((r'\?',            cfg.break_interrogacion))
+
+    if reglas:
+        combined = '|'.join(f'({patron})' for patron, _ in reglas)
+        tiempos  = [t for _, t in reglas]
+        def _reemplazar(m):
+            for i, t in enumerate(tiempos):
+                if m.group(i + 1) is not None:
+                    return f'{m.group(i + 1)} {b(t)}'
+            return m.group(0)
+        t = re.sub(combined, _reemplazar, texto)
+    else:
+        t = texto
+
+    # Párrafos: si ya hay un break antes del \n\n, reemplazarlo por break_parrafo
+    if cfg.break_parrafo > 0:
+        brk = b(cfg.break_parrafo)
+        t = re.sub(r' <break time="[\d.]+s"/>([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
+        t = re.sub(r'(?<!/>)([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
+
+    # Eliminar breaks sobrantes al final
+    t = re.sub(r'(\s*<break time="[\d.]+s"/>)+\s*$', '', t).strip()
+    return t
+
+
+def _break_largo(ms: int, max_s: float = 3.0) -> str:
+    """Convierte ms a serie de <break/> de máx max_s s (límite ElevenLabs)."""
+    restante = ms / 1000
+    partes = []
+    while restante > max_s:
+        partes.append(f'<break time="{max_s:.1f}s"/>')
+        restante -= max_s
+    if restante > 0:
+        partes.append(f'<break time="{restante:.1f}s"/>')
+    return ' '.join(partes)
+
+
 def texto_a_audio_api(texto: str, ruta_salida: Path,
                       voice_speed: float, cfg: Config) -> bool:
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
+    texto_tts = insertar_breaks_ssml(texto, cfg)
     payload = {
-        "text": texto,
+        "text": texto_tts,
         "model_id": cfg.model_id,
         "language_code": cfg.language_code,
         "voice_settings": {**cfg.voice_settings.model_dump(), "speed": voice_speed},
@@ -228,39 +292,96 @@ def emit_event(job_id: str, event_type: str, data: dict):
         jobs[job_id]["last_event"] = {"type": event_type, "data": data}
 
 def _construir_bloques(texto: str, cfg: Config) -> list[str]:
-    parrafos = [p.strip() for p in re.split(r'\n\s*\n', texto) if p.strip()]
-    parrafos = [" ".join(p.split()) for p in parrafos]
+    """
+    Divide el texto en bloques para TTS.
+    Trata cada línea como unidad y las fusiona con \\n\\n hasta alcanzar
+    min_chars, preservando la estructura para que insertar_breaks_ssml
+    pueda agregar los breaks de párrafo correctamente.
+    """
+    lineas = [l.strip() for l in texto.splitlines() if l.strip()]
 
     fusionados: list[str] = []
     buffer = ""
-    for parrafo in parrafos:
+    for linea in lineas:
         if not buffer:
-            buffer = parrafo
+            buffer = linea
         else:
             if len(buffer) < cfg.min_chars_parrafo:
-                candidato = buffer + " " + parrafo
+                candidato = buffer + "\n\n" + linea
                 if len(candidato) <= cfg.max_chars_parrafo:
                     buffer = candidato
                 else:
                     fusionados.append(buffer)
-                    buffer = parrafo
+                    buffer = linea
             else:
                 fusionados.append(buffer)
-                buffer = parrafo
+                buffer = linea
     if buffer:
         if (fusionados
                 and len(buffer) < cfg.min_chars_parrafo
-                and len(fusionados[-1]) + 1 + len(buffer) <= cfg.max_chars_parrafo):
-            fusionados[-1] = fusionados[-1] + " " + buffer
+                and len(fusionados[-1]) + 2 + len(buffer) <= cfg.max_chars_parrafo):
+            fusionados[-1] = fusionados[-1] + "\n\n" + buffer
         else:
             fusionados.append(buffer)
 
     bloques: list[str] = []
-    for parrafo in fusionados:
-        if len(parrafo) <= cfg.max_chars_parrafo:
-            bloques.append(parrafo)
+    for bloque in fusionados:
+        if len(bloque) <= cfg.max_chars_parrafo:
+            bloques.append(bloque)
         else:
-            oraciones = re.split(r'(?<=[.!?])\s+', parrafo)
+            oraciones = re.split(r'(?<=[.!?])\s+', bloque)
+            bloque_actual = ""
+            for oracion in oraciones:
+                if len(bloque_actual) + len(oracion) + 2 <= cfg.max_chars_parrafo:
+                    bloque_actual += ("\n\n" if bloque_actual else "") + oracion
+                else:
+                    if bloque_actual:
+                        bloques.append(bloque_actual)
+                    bloque_actual = oracion
+            if bloque_actual:
+                bloques.append(bloque_actual)
+
+    return bloques
+
+
+def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
+    """
+    Para afirmaciones: fusiona líneas cortas respetando min/max chars.
+    Usa _break_largo como separador para mantener los 10 s entre afirmaciones
+    incluso cuando quedan en el mismo bloque.
+    """
+    sep = _break_largo(cfg.pausa_entre_afirmaciones)
+    lineas = [l.strip() for l in texto.splitlines() if l.strip()]
+
+    fusionados: list[str] = []
+    buffer = ""
+    for linea in lineas:
+        if not buffer:
+            buffer = linea
+        elif len(buffer) < cfg.min_chars_parrafo:
+            candidato = buffer + " " + sep + " " + linea
+            if len(candidato) <= cfg.max_chars_parrafo:
+                buffer = candidato
+            else:
+                fusionados.append(buffer)
+                buffer = linea
+        else:
+            fusionados.append(buffer)
+            buffer = linea
+    if buffer:
+        if (fusionados
+                and len(buffer) < cfg.min_chars_parrafo
+                and len(fusionados[-1]) + len(sep) + 2 + len(buffer) <= cfg.max_chars_parrafo):
+            fusionados[-1] = fusionados[-1] + " " + sep + " " + buffer
+        else:
+            fusionados.append(buffer)
+
+    bloques: list[str] = []
+    for bloque in fusionados:
+        if len(bloque) <= cfg.max_chars_parrafo:
+            bloques.append(bloque)
+        else:
+            oraciones = re.split(r'(?<=[.!?])\s+', bloque)
             bloque_actual = ""
             for oracion in oraciones:
                 if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
@@ -282,7 +403,7 @@ def _guardar_preview(audio: "AudioSegment", job_id: str,
                      section: str, index: int) -> str:
     path = CARPETA_TEMP / f"preview_{job_id}_{section}_{index}.wav"
     audio.export(str(path), format="wav")
-    return f"/api/preview/{job_id}/{section}/{index}"
+    return f"/api/preview/{job_id}/{section}/{index}?t={int(time.time())}"
 
 def _esperar_revision(job_id: str, section: str, items: list[str],
                       carpeta: Path, prefijo: str,
@@ -394,7 +515,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── AFIRMACIONES ──────────────────────────────────────
         afirmaciones = []
         if tiene_afirm:
-            afirmaciones = [l.strip() for l in secciones["afirmaciones"].splitlines() if l.strip()]
+            afirmaciones = _construir_bloques_afirm(secciones["afirmaciones"], cfg)
             jobs[job_id]["afirmaciones"]    = afirmaciones
             jobs[job_id]["afirm_decisions"] = {}
 

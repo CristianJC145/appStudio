@@ -9,6 +9,7 @@ function AudioPlayer({ src }) {
   const [current, setCurrent]   = useState(0)
   const [duration, setDuration] = useState(0)
   const [speed, setSpeed]       = useState(1)
+  const [dragVal, setDragVal]   = useState(null) // posición visual mientras arrastra
   const SPEEDS = [1, 1.5, 2]
 
   useEffect(() => {
@@ -18,8 +19,10 @@ function AudioPlayer({ src }) {
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
+    setDragVal(null)
     setSpeed(1)
     a.playbackRate = 1
+    a.load() // fuerza carga de metadatos en desktop sin interacción previa
   }, [src])
 
   const fmt = (s) => {
@@ -34,20 +37,25 @@ function AudioPlayer({ src }) {
     setPlaying(p => !p)
   }
 
+  // Usa `duration` (state) — nunca a.duration que puede ser NaN en desktop
   const skip = (secs) => {
     const a = audioRef.current
-    if (!a) return
-    const next = Math.max(0, Math.min(a.duration || 0, a.currentTime + secs))
+    if (!a || !duration) return
+    const next = Math.max(0, Math.min(duration, a.currentTime + secs))
     a.currentTime = next
     setCurrent(next)
   }
 
-  const onSeek = (e) => {
-    const a = audioRef.current
-    if (!a || !duration) return
+  // En desktop onChange dispara en cada pixel del drag → solo actualiza visual
+  const onSeekChange = (e) => setDragVal(parseFloat(e.target.value))
+
+  // Al soltar (desktop mouseup / mobile touchend) → commit al audio
+  const onSeekCommit = (e) => {
     const val = parseFloat(e.target.value)
-    a.currentTime = val
+    const a = audioRef.current
+    if (a) a.currentTime = val
     setCurrent(val)
+    setDragVal(null)
   }
 
   const cycleSpeed = () => {
@@ -62,20 +70,21 @@ function AudioPlayer({ src }) {
         ref={audioRef}
         src={src}
         preload="auto"
-        onTimeUpdate={e => setCurrent(e.target.currentTime)}
+        onTimeUpdate={e => { if (dragVal === null) setCurrent(e.target.currentTime) }}
         onLoadedMetadata={e => setDuration(e.target.duration)}
         onEnded={() => setPlaying(false)}
       />
 
-      {/* Barra de progreso — input range nativo para seek confiable */}
       <input
         className="ap-seek"
         type="range"
         min={0}
         max={duration || 0}
         step={0.1}
-        value={current}
-        onChange={onSeek}
+        value={dragVal !== null ? dragVal : current}
+        onChange={onSeekChange}
+        onMouseUp={onSeekCommit}
+        onTouchEnd={onSeekCommit}
       />
 
       {/* Controles */}
@@ -139,9 +148,9 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
         {(text || "…")
           .replace(/<break[^>]*\/>/g, "")
           .replace(/[ \t]+/g, " ")
-          .replace(/\n{2,}/g, "\n")
           .replace(/ \n/g, "\n")
           .replace(/\n /g, "\n")
+          .replace(/\n+/g, "\n\n")
           .trim()}
       </div>
 

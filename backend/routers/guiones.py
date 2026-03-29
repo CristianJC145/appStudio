@@ -841,7 +841,11 @@ async def calibrar_voz(audio: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        seg = AudioSegment.from_file(tmp_path).set_channels(1)
+        try:
+            seg = AudioSegment.from_file(tmp_path).set_channels(1)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"No se pudo leer el audio: {str(e)}")
+
         dur_ms = len(seg)
 
         if dur_ms < 3000:

@@ -924,6 +924,45 @@ body.dashboard-body #root {
 .calib-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .calib-btn-primary:not(:disabled):hover { opacity: 0.88; }
 
+/* ── Calibration: section picker ─────────────────────────── */
+.calib-section-pick { padding: 4px 20px 20px; }
+.calib-section-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px;
+}
+.calib-section-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 18px 10px; border-radius: 12px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--bd-dim);
+  color: var(--tx1); cursor: pointer;
+  transition: background var(--t), border-color var(--t), transform var(--t);
+  font-family: var(--ff-sans);
+}
+.calib-section-card:hover {
+  background: rgba(74,184,212,0.08); border-color: var(--cyan2);
+  transform: translateY(-2px);
+}
+.calib-section-icon { font-size: 1.4rem; }
+.calib-section-name { font-size: 0.85rem; font-weight: 700; color: var(--tx1); }
+.calib-section-desc { font-size: 0.72rem; color: var(--tx3); text-align: center; line-height: 1.35; }
+
+/* section badge (shown in upload + result steps) */
+.calib-section-badge {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 20px 12px; padding: 7px 12px; border-radius: 8px;
+  background: rgba(74,184,212,0.08); border: 1px solid rgba(74,184,212,0.22);
+  font-size: 0.8rem; color: var(--tx2);
+}
+.calib-section-badge strong { color: var(--cyan2); }
+.calib-section-badge--result { background: rgba(212,168,67,0.07); border-color: rgba(212,168,67,0.25); }
+.calib-section-badge--result strong { color: var(--gold2); }
+.calib-change-sec {
+  margin-left: auto; padding: 2px 8px; border-radius: 5px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--bd-dim);
+  color: var(--tx3); font-size: 0.73rem; cursor: pointer;
+  transition: background var(--t);
+}
+.calib-change-sec:hover { background: rgba(255,255,255,0.09); color: var(--tx2); }
+
 
 /* ══════════════════════════════════════════
    FORMS

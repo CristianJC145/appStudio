@@ -72,12 +72,26 @@ const CALIB_LABELS = {
   medit_voice_speed:   "Velocidad Meditación",
 }
 
+const SECCIONES = [
+  { id: "intro",        label: "Intro",        desc: "",      icon: "▶" },
+  { id: "meditacion",   label: "Meditación",   desc: "",      icon: "◈" },
+  { id: "afirmaciones", label: "Afirmaciones", desc: "",   icon: "✦" },
+]
+
 function CalibracionModal({ onClose, onApply }) {
-  const [estado, setEstado] = useState("idle") // idle | analizando | listo | error
-  const [resultado, setResultado]   = useState(null)
-  const [errorMsg, setErrorMsg]     = useState("")
-  const [fileName, setFileName]     = useState("")
-  const [seleccionados, setSeleccionados] = useState({})
+  const [estado, setEstado] = useState("seccion") // seccion | idle | analizando | listo | error
+  const [seccion, setSeccion]               = useState(null)
+  const [resultado, setResultado]           = useState(null)
+  const [errorMsg, setErrorMsg]             = useState("")
+  const [fileName, setFileName]             = useState("")
+  const [seleccionados, setSeleccionados]   = useState({})
+
+  const seleccionarSeccion = (id) => {
+    setSeccion(id)
+    setEstado("idle")
+    setResultado(null)
+    setErrorMsg("")
+  }
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
@@ -91,10 +105,9 @@ function CalibracionModal({ onClose, onApply }) {
     setEstado("analizando")
     setErrorMsg("")
     try {
-      // Lee el archivo como base64 para evitar problemas CORS/proxy con multipart
       const audio_b64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload  = () => resolve(reader.result.split(",")[1]) // quita "data:...;base64,"
+        reader.onload  = () => resolve(reader.result.split(",")[1])
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
@@ -102,7 +115,7 @@ function CalibracionModal({ onClose, onApply }) {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/calibrar-voz`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_b64, filename: file.name }),
+        body: JSON.stringify({ audio_b64, filename: file.name, seccion }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || "Error al analizar")
@@ -129,22 +142,50 @@ function CalibracionModal({ onClose, onApply }) {
     onClose()
   }
 
+  const seccionInfo = SECCIONES.find(s => s.id === seccion)
+
   return (
     <div className="calib-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="calib-modal">
         <div className="calib-header">
           <div>
             <span className="calib-eyebrow">Asistente de calibración</span>
-            <h3 className="calib-title">Calibrar voz desde audio</h3>
+            <h3 className="calib-title">
+              {seccionInfo ? `Calibrar — ${seccionInfo.label}` : "Calibrar voz desde audio"}
+            </h3>
           </div>
           <button className="calib-close" onClick={onClose}>✕</button>
         </div>
 
+        {/* ── Paso 1: elegir sección ── */}
+        {estado === "seccion" && (
+          <div className="calib-section-pick">
+            <p className="calib-desc">
+              ¿Qué sección quieres calibrar? Sube un audio representativo de esa parte
+              y el sistema ajustará solo los parámetros correspondientes.
+            </p>
+            <div className="calib-section-grid">
+              {SECCIONES.map(s => (
+                <button key={s.id} className="calib-section-card" onClick={() => seleccionarSeccion(s.id)}>
+                  <span className="calib-section-icon">{s.icon}</span>
+                  <span className="calib-section-name">{s.label}</span>
+                  <span className="calib-section-desc">{s.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Paso 2: subir audio ── */}
         {(estado === "idle" || estado === "error") && (
           <div className="calib-upload-area">
+            <div className="calib-section-badge">
+              <span>{seccionInfo?.icon}</span> Calibrando: <strong>{seccionInfo?.label}</strong>
+              <button className="calib-change-sec" onClick={() => setEstado("seccion")}>Cambiar</button>
+            </div>
             <p className="calib-desc">
-              Sube un audio de referencia (tu voz o la voz deseada) y el sistema
-              analizará los patrones de silencio y velocidad para sugerir la configuración óptima.
+              Sube un audio de referencia de la sección <strong>{seccionInfo?.label}</strong>.
+              El sistema analizará silencios y velocidad para sugerir la configuración óptima.
             </p>
             <label className="calib-file-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -154,11 +195,12 @@ function CalibracionModal({ onClose, onApply }) {
               Seleccionar audio
               <input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" onChange={handleFile} hidden />
             </label>
-            <p className="calib-formats">MP3 · WAV · M4A · OGG · FLAC · AAC</p>
+            <p className="calib-formats">MP3 · WAV · M4A · OGG · FLAC · AAC · máx. 30 MB</p>
             {estado === "error" && <p className="calib-error">{errorMsg}</p>}
           </div>
         )}
 
+        {/* ── Analizando ── */}
         {estado === "analizando" && (
           <div className="calib-loading">
             <div className="calib-spinner" />
@@ -166,9 +208,13 @@ function CalibracionModal({ onClose, onApply }) {
           </div>
         )}
 
+        {/* ── Paso 3: resultados ── */}
         {estado === "listo" && resultado && (
           <>
-            {/* Stats strip */}
+            <div className="calib-section-badge calib-section-badge--result">
+              <span>{seccionInfo?.icon}</span> Resultados para: <strong>{seccionInfo?.label}</strong>
+            </div>
+
             <div className="calib-stats">
               <div className="calib-stat">
                 <span>{resultado.analisis.duracion_s}s</span>
@@ -188,7 +234,6 @@ function CalibracionModal({ onClose, onApply }) {
               </div>
             </div>
 
-            {/* Param list */}
             <div className="calib-params-head">
               <span>Parámetro</span>
               <span>Sugerencia</span>
@@ -212,6 +257,9 @@ function CalibracionModal({ onClose, onApply }) {
             <div className="calib-actions">
               <button className="calib-btn-secondary" onClick={() => { setEstado("idle"); setResultado(null) }}>
                 Usar otro audio
+              </button>
+              <button className="calib-btn-secondary" onClick={() => { setEstado("seccion"); setSeccion(null); setResultado(null) }}>
+                Otra sección
               </button>
               <button className="calib-btn-primary" onClick={aplicar}
                 disabled={!Object.values(seleccionados).some(Boolean)}>

@@ -822,8 +822,9 @@ def delete_history(filename: str):
 
 
 class CalibracionRequest(BaseModel):
-    audio_b64: str          # base64-encoded audio bytes
+    audio_b64: str
     filename: str = "audio.mp3"
+    seccion: str = "intro"   # "intro" | "meditacion" | "afirmaciones"
 
 
 @router.post("/calibrar-voz")
@@ -916,25 +917,30 @@ def calibrar_voz(body: CalibracionRequest):
         else:
             speed_base = 0.85
 
-        # Orden correcto: intro (más rápido) > meditación > afirmaciones (más lento)
-        intro_speed = round(min(speed_base + 0.05, 1.20), 2)
-        medit_speed = round(speed_base, 2)
-        afirm_speed = round(max(speed_base - 0.05, 0.70), 2)
+        # Velocidad: directamente del audio analizado, sin escalar
+        speed = round(max(0.70, min(speed_base, 1.20)), 2)
+
+        # Solo se devuelve el parámetro de velocidad de la sección solicitada
+        SPEED_KEY = {
+            "intro":        "intro_voice_speed",
+            "meditacion":   "medit_voice_speed",
+            "afirmaciones": "afirm_voice_speed",
+        }
+        speed_key = SPEED_KEY.get(body.seccion, "intro_voice_speed")
 
         return {
+            "seccion": body.seccion,
             "sugerencias": {
-                "break_coma":         break_coma,
-                "break_punto":        break_punto,
-                "break_suspensivos":  break_suspensivos,
-                "break_dos_puntos":   break_dos_puntos,
-                "break_punto_coma":   break_punto_coma,
-                "break_exclamacion":  break_exclamacion,
-                "break_interrogacion":break_interrogacion,
-                "break_guion":        break_guion,
-                "break_parrafo":      break_parrafo,
-                "intro_voice_speed":  intro_speed,
-                "afirm_voice_speed":  afirm_speed,
-                "medit_voice_speed":  medit_speed,
+                "break_coma":          break_coma,
+                "break_punto":         break_punto,
+                "break_suspensivos":   break_suspensivos,
+                "break_dos_puntos":    break_dos_puntos,
+                "break_punto_coma":    break_punto_coma,
+                "break_exclamacion":   break_exclamacion,
+                "break_interrogacion": break_interrogacion,
+                "break_guion":         break_guion,
+                "break_parrafo":       break_parrafo,
+                speed_key:             speed,
             },
             "analisis": {
                 "duracion_s":          round(dur_ms / 1000, 1),

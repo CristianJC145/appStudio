@@ -20,7 +20,7 @@ SECRET_KEY         = os.getenv("JWT_SECRET", "studio_jwt_secret_change_in_produc
 ALGORITHM          = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7   # 7 days
 
-DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_HOST = os.getenv("DB_HOST", "app-studio_db")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASS = os.getenv("DB_PASS", "")
@@ -202,6 +202,7 @@ def register(body: RegisterRequest):
         raise HTTPException(status_code=409, detail="El nombre de usuario ya está en uso")
     try:
         user = _create_user(body.username, body.email, body.password, role="user")
+        print(f"usuario creado: {user}")
     except Exception as e:
         if "email" in str(e):
             raise HTTPException(status_code=409, detail="El correo ya está registrado")

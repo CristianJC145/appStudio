@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Optional
 from collections import defaultdict
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+import statistics
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -816,6 +818,115 @@ def delete_history(filename: str):
     if path.exists():
         path.unlink()
     return {"ok": True}
+
+
+@router.post("/calibrar-voz")
+async def calibrar_voz(audio: UploadFile = File(...)):
+    """
+    Analiza un audio de referencia y devuelve parámetros de configuración sugeridos.
+    Extrae patrones de silencio → break times SSML
+    Extrae ratio habla/silencio → velocidad de voz
+    """
+    if not PYDUB_AVAILABLE:
+        raise HTTPException(status_code=500, detail="pydub no disponible")
+
+    FORMATOS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".webm"}
+    ext = Path(audio.filename or "audio.mp3").suffix.lower()
+    if ext not in FORMATOS:
+        raise HTTPException(status_code=422, detail=f"Formato no soportado. Usa: {', '.join(FORMATOS)}")
+
+    # Guardar en temp
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(await audio.read())
+        tmp_path = tmp.name
+
+    try:
+        seg = AudioSegment.from_file(tmp_path).set_channels(1)
+        dur_ms = len(seg)
+
+        if dur_ms < 3000:
+            raise HTTPException(status_code=422, detail="El audio debe tener al menos 3 segundos")
+
+        # Umbral dinámico: 14 dB por encima del nivel medio de ruido
+        thresh = seg.dBFS - 14
+
+        silencios = detect_silence(seg, min_silence_len=150, silence_thresh=thresh)
+        duraciones = [end - start for start, end in silencios]
+
+        # Filtrar silencios de intro/outro (>5s) — no representan pausas de habla
+        duraciones = [d for d in duraciones if d <= 5000]
+
+        # Clasificar por duración natural del habla
+        cortos  = [d for d in duraciones if d < 450]          # coma-level  ~200-450ms
+        medios  = [d for d in duraciones if 450 <= d < 1100]  # punto-level ~450-1100ms
+        largos  = [d for d in duraciones if 1100 <= d <= 5000] # párrafo    >1100ms
+
+        def promedio(lst, default_ms):
+            return statistics.mean(lst) if len(lst) >= 2 else default_ms
+
+        avg_corto  = promedio(cortos,  350)
+        avg_medio  = promedio(medios,  700)
+        avg_largo  = promedio(largos, 1800)
+
+        # Convertir a segundos con límites razonables para ElevenLabs
+        break_coma        = round(max(0.2, min(avg_corto  / 1000, 1.5)), 2)
+        break_punto       = round(max(0.4, min(avg_medio  / 1000, 2.5)), 2)
+        break_parrafo     = round(max(0.8, min(avg_largo  / 1000, 3.0)), 2)
+
+        # Derivar los demás proporcionalmente
+        break_suspensivos   = round(min(break_punto * 1.15, 3.0), 2)
+        break_dos_puntos    = round(max(break_coma * 0.80, 0.2), 2)
+        break_punto_coma    = round((break_coma + break_punto) / 2, 2)
+        break_exclamacion   = round(break_punto, 2)
+        break_interrogacion = round(break_punto, 2)
+        break_guion         = round(break_coma, 2)
+
+        # ── Velocidad de voz ────────────────────────────────────────
+        total_silencio_ms = sum(end - start for start, end in silencios)
+        habla_ms   = max(dur_ms - total_silencio_ms, 0)
+        ratio_habla = habla_ms / dur_ms  # 0 = todo silencio, 1 = habla continua
+
+        # Meditaciones: ratio típico 0.45-0.65 → speed 0.85-0.95
+        # Narración normal: ratio 0.65-0.78 → speed 0.95-1.05
+        if ratio_habla >= 0.76:
+            speed_base = 1.05
+        elif ratio_habla >= 0.66:
+            speed_base = 0.97
+        elif ratio_habla >= 0.55:
+            speed_base = 0.90
+        else:
+            speed_base = 0.85
+
+        intro_speed = round(min(speed_base + 0.04, 1.20), 2)
+        afirm_speed = round(speed_base, 2)
+        medit_speed = round(max(speed_base - 0.04, 0.70), 2)
+
+        return {
+            "sugerencias": {
+                "break_coma":         break_coma,
+                "break_punto":        break_punto,
+                "break_suspensivos":  break_suspensivos,
+                "break_dos_puntos":   break_dos_puntos,
+                "break_punto_coma":   break_punto_coma,
+                "break_exclamacion":  break_exclamacion,
+                "break_interrogacion":break_interrogacion,
+                "break_guion":        break_guion,
+                "break_parrafo":      break_parrafo,
+                "intro_voice_speed":  intro_speed,
+                "afirm_voice_speed":  afirm_speed,
+                "medit_voice_speed":  medit_speed,
+            },
+            "analisis": {
+                "duracion_s":          round(dur_ms / 1000, 1),
+                "ratio_habla":         round(ratio_habla, 3),
+                "silencios_detectados": len(duraciones),
+                "pausa_corta_avg_ms":  round(avg_corto),
+                "pausa_media_avg_ms":  round(avg_medio),
+                "pausa_larga_avg_ms":  round(avg_largo),
+            },
+        }
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 @router.get("/voices")

@@ -56,6 +56,165 @@ function Section({ title, children, open, onToggle }) {
 }
 
 
+/* ── Calibration modal ──────────────────────────────────────── */
+const CALIB_LABELS = {
+  break_coma:          "Pausa Coma",
+  break_punto:         "Pausa Punto",
+  break_suspensivos:   "Pausa …",
+  break_dos_puntos:    "Pausa :",
+  break_punto_coma:    "Pausa ;",
+  break_exclamacion:   "Pausa !",
+  break_interrogacion: "Pausa ?",
+  break_guion:         "Pausa —",
+  break_parrafo:       "Pausa Párrafo",
+  intro_voice_speed:   "Velocidad Intro",
+  afirm_voice_speed:   "Velocidad Afirmaciones",
+  medit_voice_speed:   "Velocidad Meditación",
+}
+
+function CalibracionModal({ onClose, onApply }) {
+  const [estado, setEstado] = useState("idle") // idle | analizando | listo | error
+  const [resultado, setResultado]   = useState(null)
+  const [errorMsg, setErrorMsg]     = useState("")
+  const [fileName, setFileName]     = useState("")
+  const [seleccionados, setSeleccionados] = useState({})
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFileName(file.name)
+    setEstado("analizando")
+    setErrorMsg("")
+    try {
+      const fd = new FormData()
+      fd.append("audio", file)
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/calibrar-voz`, {
+        method: "POST", body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "Error al analizar")
+      setResultado(data)
+      // Seleccionar todos por defecto
+      const todos = {}
+      Object.keys(data.sugerencias).forEach(k => { todos[k] = true })
+      setSeleccionados(todos)
+      setEstado("listo")
+    } catch (err) {
+      setErrorMsg(err.message)
+      setEstado("error")
+    }
+  }
+
+  const toggleKey = (k) => setSeleccionados(s => ({ ...s, [k]: !s[k] }))
+
+  const aplicar = () => {
+    const paramsAplicar = {}
+    Object.entries(seleccionados).forEach(([k, v]) => {
+      if (v && resultado?.sugerencias?.[k] !== undefined)
+        paramsAplicar[k] = resultado.sugerencias[k]
+    })
+    onApply(paramsAplicar)
+    onClose()
+  }
+
+  return (
+    <div className="calib-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="calib-modal">
+        <div className="calib-header">
+          <div>
+            <span className="calib-eyebrow">Asistente de calibración</span>
+            <h3 className="calib-title">Calibrar voz desde audio</h3>
+          </div>
+          <button className="calib-close" onClick={onClose}>✕</button>
+        </div>
+
+        {(estado === "idle" || estado === "error") && (
+          <div className="calib-upload-area">
+            <p className="calib-desc">
+              Sube un audio de referencia (tu voz o la voz deseada) y el sistema
+              analizará los patrones de silencio y velocidad para sugerir la configuración óptima.
+            </p>
+            <label className="calib-file-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Seleccionar audio
+              <input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" onChange={handleFile} hidden />
+            </label>
+            <p className="calib-formats">MP3 · WAV · M4A · OGG · FLAC · AAC</p>
+            {estado === "error" && <p className="calib-error">{errorMsg}</p>}
+          </div>
+        )}
+
+        {estado === "analizando" && (
+          <div className="calib-loading">
+            <div className="calib-spinner" />
+            <p>Analizando <em>{fileName}</em>…</p>
+          </div>
+        )}
+
+        {estado === "listo" && resultado && (
+          <>
+            {/* Stats strip */}
+            <div className="calib-stats">
+              <div className="calib-stat">
+                <span>{resultado.analisis.duracion_s}s</span>
+                <span>Duración</span>
+              </div>
+              <div className="calib-stat">
+                <span>{Math.round(resultado.analisis.ratio_habla * 100)}%</span>
+                <span>Ratio habla</span>
+              </div>
+              <div className="calib-stat">
+                <span>{resultado.analisis.silencios_detectados}</span>
+                <span>Silencios</span>
+              </div>
+              <div className="calib-stat">
+                <span>{resultado.analisis.pausa_corta_avg_ms}ms</span>
+                <span>Pausa corta avg</span>
+              </div>
+            </div>
+
+            {/* Param list */}
+            <div className="calib-params-head">
+              <span>Parámetro</span>
+              <span>Sugerencia</span>
+              <span>Aplicar</span>
+            </div>
+            <ul className="calib-params">
+              {Object.entries(resultado.sugerencias).map(([k, v]) => (
+                <li key={k} className={seleccionados[k] ? "selected" : ""}>
+                  <span className="calib-param-label">{CALIB_LABELS[k] ?? k}</span>
+                  <span className="calib-param-val">{v}</span>
+                  <input
+                    type="checkbox"
+                    className="calib-check"
+                    checked={!!seleccionados[k]}
+                    onChange={() => toggleKey(k)}
+                  />
+                </li>
+              ))}
+            </ul>
+
+            <div className="calib-actions">
+              <button className="calib-btn-secondary" onClick={() => { setEstado("idle"); setResultado(null) }}>
+                Usar otro audio
+              </button>
+              <button className="calib-btn-primary" onClick={aplicar}
+                disabled={!Object.values(seleccionados).some(Boolean)}>
+                Aplicar seleccionados
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+
 export default function ConfigPanel({ config, setConfig }) {
   const set = (key, val) => setConfig(prev => ({ ...prev, [key]: val }))
   const setVS = (key, val) =>
@@ -63,6 +222,7 @@ export default function ConfigPanel({ config, setConfig }) {
 
   const [voices, setVoices] = useState([])
   const [loadingVoices, setLoadingVoices] = useState(false)
+  const [showCalib, setShowCalib] = useState(false)
 
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -79,6 +239,10 @@ export default function ConfigPanel({ config, setConfig }) {
     })
   }
 
+  const aplicarCalibracion = (params) => {
+    setConfig(prev => ({ ...prev, ...params }))
+  }
+
   const fetchVoices = async () => {
     if (!config.api_key) return
     setLoadingVoices(true)
@@ -92,9 +256,25 @@ export default function ConfigPanel({ config, setConfig }) {
 
   return (
     <div className="card fade-up" style={{ animationDelay: "0.08s" }}>
+      {showCalib && (
+        <CalibracionModal
+          onClose={() => setShowCalib(false)}
+          onApply={aplicarCalibracion}
+        />
+      )}
+
       <div className="card-header">
-        <div className="card-title">Configuración</div>
-        <div className="card-subtitle">ElevenLabs + Audio</div>
+        <div>
+          <div className="card-title">Configuración </div>
+          <div className="card-subtitle">ElevenLabs + Audio</div>
+        </div>
+        <button className="calib-trigger-btn" onClick={() => setShowCalib(true)} title="Calibrar parámetros desde un audio de referencia">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          Calibrar voz
+        </button>
       </div>
 
       <Section title="API & Voz" open={openSections["API & Voz"]} onToggle={() => toggleSection("API & Voz")}>

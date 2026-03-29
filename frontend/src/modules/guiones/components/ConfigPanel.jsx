@@ -229,8 +229,8 @@ function CalibracionModal({ onClose, onApply }) {
                 <span>Silencios</span>
               </div>
               <div className="calib-stat">
-                <span>{resultado.analisis.pausa_corta_avg_ms}ms</span>
-                <span>Pausa corta avg</span>
+                <span>{resultado.analisis.seg_frase_avg_ms || resultado.analisis.pausa_corta_avg_ms}ms</span>
+                <span>Seg. frase avg</span>
               </div>
             </div>
 

@@ -904,20 +904,38 @@ def calibrar_voz(body: CalibracionRequest):
         # ── Velocidad de voz ────────────────────────────────────────
         total_silencio_ms = sum(end - start for start, end in silencios)
         habla_ms   = max(dur_ms - total_silencio_ms, 0)
-        ratio_habla = habla_ms / dur_ms  # 0 = todo silencio, 1 = habla continua
+        ratio_habla = habla_ms / dur_ms
 
-        # Meditaciones: ratio típico 0.45-0.65 → speed 0.85-0.95
-        # Narración normal: ratio 0.65-0.78 → speed 0.95-1.05
-        if ratio_habla >= 0.76:
-            speed_base = 1.05
-        elif ratio_habla >= 0.66:
-            speed_base = 0.97
-        elif ratio_habla >= 0.55:
-            speed_base = 0.90
+        # Detectar segmentos a nivel de frase (pausas > 300ms) para estimar
+        # duración típica de bloque hablado — eso sí cambia con la velocidad.
+        silencios_frase = detect_silence(seg, min_silence_len=300, silence_thresh=thresh)
+
+        segmentos_voz = []
+        prev_end = 0
+        for start, end in sorted(silencios_frase):
+            chunk = start - prev_end
+            if chunk > 100:
+                segmentos_voz.append(chunk)
+            prev_end = end
+        if prev_end < dur_ms - 100:
+            segmentos_voz.append(dur_ms - prev_end)
+
+        # Quedarse con segmentos "frase": 150 ms – 3 000 ms
+        segmentos_frase = [d for d in segmentos_voz if 150 <= d <= 3000]
+
+        if len(segmentos_frase) >= 3:
+            # Mediana robusta ante outliers
+            mediana_seg = statistics.median(segmentos_frase)
+            # Baseline empírico: un hablante/TTS a speed=1.0 produce frases de ~750 ms
+            # entre pausas ≥ 300 ms. A menor speed → frases más largas → speed_base baja.
+            speed_base = 750.0 / mediana_seg
         else:
-            speed_base = 0.85
+            # Fallback: usar densidad de silencios cortos detectados
+            silencios_cortos = len([d for d in duraciones if d < 500])
+            densidad = silencios_cortos / (dur_ms / 1000)  # eventos/s
+            # ~1.5 eventos/s → speed 1.0; escala lineal
+            speed_base = densidad / 1.5
 
-        # Velocidad: directamente del audio analizado, sin escalar
         speed = round(max(0.70, min(speed_base, 1.20)), 2)
 
         # Solo se devuelve el parámetro de velocidad de la sección solicitada
@@ -943,12 +961,12 @@ def calibrar_voz(body: CalibracionRequest):
                 speed_key:             speed,
             },
             "analisis": {
-                "duracion_s":          round(dur_ms / 1000, 1),
-                "ratio_habla":         round(ratio_habla, 3),
+                "duracion_s":           round(dur_ms / 1000, 1),
+                "ratio_habla":          round(ratio_habla, 3),
                 "silencios_detectados": len(duraciones),
-                "pausa_corta_avg_ms":  round(avg_corto),
-                "pausa_media_avg_ms":  round(avg_medio),
-                "pausa_larga_avg_ms":  round(avg_largo),
+                "seg_frase_avg_ms":     round(statistics.median(segmentos_frase)) if segmentos_frase else 0,
+                "pausa_media_avg_ms":   round(avg_medio),
+                "pausa_larga_avg_ms":   round(avg_largo),
             },
         }
     finally:

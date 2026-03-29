@@ -72,19 +72,61 @@ const CALIB_LABELS = {
   medit_voice_speed:   "Velocidad Meditación",
 }
 
+const SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
+
 const SECCIONES = [
   { id: "intro",        label: "Intro",        desc: "",      icon: "▶" },
   { id: "meditacion",   label: "Meditación",   desc: "",      icon: "◈" },
   { id: "afirmaciones", label: "Afirmaciones", desc: "",   icon: "✦" },
 ]
 
-function CalibracionModal({ onClose, onApply }) {
+function CalibracionModal({ onClose, onApply, config = {} }) {
+  const API = import.meta.env.VITE_API_URL
+
   const [estado, setEstado] = useState("seccion") // seccion | idle | analizando | listo | error
   const [seccion, setSeccion]               = useState(null)
   const [resultado, setResultado]           = useState(null)
   const [errorMsg, setErrorMsg]             = useState("")
   const [fileName, setFileName]             = useState("")
   const [seleccionados, setSeleccionados]   = useState({})
+
+  // Estado de referencias de calibración
+  const [refStatus, setRefStatus]   = useState(null)   // null | {calibrated, points_count, generated_at}
+  const [generando, setGenerando]   = useState(false)
+  const [genError, setGenError]     = useState("")
+
+  const voiceOk = !!(config.voice_id && config.api_key)
+
+  useEffect(() => {
+    if (!voiceOk) return
+    fetch(`${API}/api/calibrar-voz/referencias?voice_id=${encodeURIComponent(config.voice_id)}&model_id=${encodeURIComponent(config.model_id || "")}`)
+      .then(r => r.json())
+      .then(setRefStatus)
+      .catch(() => {})
+  }, [config.voice_id, config.model_id])
+
+  const generarReferencias = async () => {
+    setGenerando(true)
+    setGenError("")
+    try {
+      const res = await fetch(`${API}/api/calibrar-voz/referencias`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key:       config.api_key,
+          voice_id:      config.voice_id,
+          model_id:      config.model_id      || "eleven_multilingual_v2",
+          language_code: config.language_code || "es",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "Error al generar")
+      setRefStatus({ calibrated: true, points_count: data.points.length, generated_at: new Date().toISOString() })
+    } catch (err) {
+      setGenError(err.message)
+    }
+    setGenerando(false)
+  }
 
   const seleccionarSeccion = (id) => {
     setSeccion(id)
@@ -112,10 +154,16 @@ function CalibracionModal({ onClose, onApply }) {
         reader.readAsDataURL(file)
       })
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/calibrar-voz`, {
+      const res = await fetch(`${API}/api/calibrar-voz`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_b64, filename: file.name, seccion }),
+        body: JSON.stringify({
+          audio_b64,
+          filename: file.name,
+          seccion,
+          voice_id: config.voice_id || "",
+          model_id: config.model_id || "",
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || "Error al analizar")
@@ -160,6 +208,32 @@ function CalibracionModal({ onClose, onApply }) {
         {/* ── Paso 1: elegir sección ── */}
         {estado === "seccion" && (
           <div className="calib-section-pick">
+            {/* Panel de referencias */}
+            {voiceOk && (
+              <div className={`calib-ref-bar ${refStatus?.calibrated ? "calib-ref-bar--ok" : "calib-ref-bar--warn"}`}>
+                {generando ? (
+                  <>
+                    <div className="calib-ref-spinner" />
+                    <span>Generando {SPEEDS_REFERENCIA.length} audios de referencia… (~30 s)</span>
+                  </>
+                ) : refStatus?.calibrated ? (
+                  <>
+                    <span className="calib-ref-icon">✓</span>
+                    <span>Referencias calibradas ({refStatus.points_count} puntos) — precisión exacta</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="calib-ref-icon">⚠</span>
+                    <span>Sin referencias — velocidad estimada (±10–15%)</span>
+                    <button className="calib-ref-btn" onClick={generarReferencias}>
+                      Generar referencias
+                    </button>
+                  </>
+                )}
+                {genError && <span className="calib-ref-error">{genError}</span>}
+              </div>
+            )}
+
             <p className="calib-desc">
               ¿Qué sección quieres calibrar? Sube un audio representativo de esa parte
               y el sistema ajustará solo los parámetros correspondientes.
@@ -229,8 +303,12 @@ function CalibracionModal({ onClose, onApply }) {
                 <span>Silencios</span>
               </div>
               <div className="calib-stat">
-                <span>{resultado.analisis.seg_frase_avg_ms || resultado.analisis.pausa_corta_avg_ms}ms</span>
-                <span>Seg. frase avg</span>
+                <span>{resultado.analisis.med_syl_ms || "—"}ms</span>
+                <span>Intervalo sílaba</span>
+              </div>
+              <div className={`calib-stat calib-stat--precision ${resultado.analisis.calibrado ? "ok" : "warn"}`}>
+                <span>{resultado.analisis.calibrado ? "Exacta" : "~±10%"}</span>
+                <span>Precisión</span>
               </div>
             </div>
 
@@ -320,6 +398,7 @@ export default function ConfigPanel({ config, setConfig }) {
         <CalibracionModal
           onClose={() => setShowCalib(false)}
           onApply={aplicarCalibracion}
+          config={config}
         />
       )}
 

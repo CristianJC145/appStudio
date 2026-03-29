@@ -963,6 +963,31 @@ body.dashboard-body #root {
 }
 .calib-change-sec:hover { background: rgba(255,255,255,0.09); color: var(--tx2); }
 
+/* ── Calibration: references bar ─────────────────────────── */
+.calib-ref-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 20px 14px; padding: 9px 13px; border-radius: 9px;
+  font-size: 0.78rem;
+}
+.calib-ref-bar--ok   { background: rgba(74,184,212,0.07);  border: 1px solid rgba(74,184,212,0.25); color: var(--cyan2); }
+.calib-ref-bar--warn { background: rgba(212,168,67,0.07);  border: 1px solid rgba(212,168,67,0.25); color: var(--gold2); }
+.calib-ref-icon  { font-size: 0.9rem; flex-shrink: 0; }
+.calib-ref-error { color: #f87171; font-size: 0.74rem; flex-basis: 100%; }
+.calib-ref-btn {
+  margin-left: auto; padding: 4px 11px; border-radius: 6px;
+  background: rgba(212,168,67,0.15); border: 1px solid rgba(212,168,67,0.35);
+  color: var(--gold2); font-size: 0.75rem; font-family: var(--ff-sans);
+  cursor: pointer; transition: background var(--t); white-space: nowrap;
+}
+.calib-ref-btn:hover { background: rgba(212,168,67,0.25); }
+.calib-ref-spinner {
+  width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(212,168,67,0.3); border-top-color: var(--gold2);
+  animation: spin 0.8s linear infinite;
+}
+.calib-stat--precision.ok   span:first-child { color: var(--cyan2); }
+.calib-stat--precision.warn span:first-child { color: var(--gold2); }
+
 
 /* ══════════════════════════════════════════
    FORMS

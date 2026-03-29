@@ -38,6 +38,23 @@ CARPETA_SALIDA = Path("salida")
 CARPETA_TEMP.mkdir(exist_ok=True)
 CARPETA_SALIDA.mkdir(exist_ok=True)
 
+# ── Calibración de voz por referencia ──────────────────────────────────────
+CALIB_DIR = Path("data") / "voice_calibrations"
+CALIB_DIR.mkdir(parents=True, exist_ok=True)
+
+SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
+
+# Sin puntuación → mide velocidad pura (sílabas)
+TEXTO_REF_VELOCIDAD = (
+    "Siente cómo tu respiración fluye naturalmente con calma y serenidad en cada momento"
+)
+# Con puntuación → mide pausas naturales de la voz (sin SSML breaks)
+TEXTO_REF_PAUSAS = (
+    "Respira, siente la calma, y relájate. Ahora... descansa completamente; "
+    "sin esfuerzo: simplemente sé en paz."
+)
+# ───────────────────────────────────────────────────────────────────────────
+
 jobs: dict[str, dict] = {}
 job_events: dict[str, list] = defaultdict(list)
 job_locks: dict[str, threading.Event] = {}
@@ -821,10 +838,131 @@ def delete_history(filename: str):
     return {"ok": True}
 
 
+# ═══ Helpers de calibración de referencia ═══════════════════════════════════
+
+def _medir_silabico_seg(seg, silencios: list) -> int:
+    """Intervalo silábico mediano (ms) a partir de un AudioSegment ya cargado."""
+    dur_ms = len(seg)
+    frame_ms = 8
+    rms_frames = [seg[i:i + frame_ms].rms for i in range(0, dur_ms - frame_ms, frame_ms)]
+    n = len(rms_frames)
+    if n < 50:
+        return 0
+    voiced = [True] * n
+    for s, e in silencios:
+        for j in range(s // frame_ms, min(e // frame_ms + 1, n)):
+            voiced[j] = False
+    smoothed = [0.0] * n
+    for i in range(n):
+        lo, hi = max(0, i - 3), min(n, i + 4)
+        sub = rms_frames[lo:hi]
+        smoothed[i] = sum(sub) / len(sub)
+    voiced_vals = [smoothed[i] for i in range(n) if voiced[i]]
+    if len(voiced_vals) < 50:
+        return 0
+    thr = statistics.mean(voiced_vals) * 0.45
+    peaks, last_p = [], -9999
+    for i in range(1, n - 1):
+        if (voiced[i]
+                and smoothed[i] > smoothed[i - 1]
+                and smoothed[i] > smoothed[i + 1]
+                and smoothed[i] > thr
+                and (i - last_p) * frame_ms >= 80):
+            peaks.append(i)
+            last_p = i
+    if len(peaks) < 8:
+        return 0
+    inter = [(peaks[k + 1] - peaks[k]) * frame_ms for k in range(len(peaks) - 1)]
+    syl_iv = [d for d in inter if 80 <= d <= 380]
+    return round(statistics.median(syl_iv)) if len(syl_iv) >= 6 else 0
+
+
+def _medir_silabico_bytes(audio_bytes: bytes, ext: str = ".mp3") -> int:
+    """Wrapper: carga desde bytes y delega en _medir_silabico_seg."""
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        seg = AudioSegment.from_file(tmp_path).set_channels(1)
+        if len(seg) < 1000:
+            return 0
+        thresh = seg.dBFS - 14
+        silencios = detect_silence(seg, min_silence_len=150, silence_thresh=thresh)
+        return _medir_silabico_seg(seg, silencios)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+def _medir_pausas_naturales_bytes(audio_bytes: bytes, ext: str = ".mp3") -> dict:
+    """Mide las pausas naturales de la voz (sin SSML) clasificadas por duración."""
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        seg = AudioSegment.from_file(tmp_path).set_channels(1)
+        thresh = seg.dBFS - 14
+        silencios = detect_silence(seg, min_silence_len=80, silence_thresh=thresh)
+        durs = [e - s for s, e in silencios if e - s <= 4000]
+        cortos = [d for d in durs if d < 350]
+        medios  = [d for d in durs if 350 <= d < 900]
+        largos  = [d for d in durs if d >= 900]
+        def _avg(lst, default):
+            return round(statistics.mean(lst)) if len(lst) >= 2 else default
+        return {
+            "natural_coma_ms":    _avg(cortos, 120),
+            "natural_punto_ms":   _avg(medios,  380),
+            "natural_parrafo_ms": _avg(largos,  850),
+        }
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+def _calib_path(voice_id: str, model_id: str) -> Path:
+    safe = lambda s: "".join(c for c in s if c.isalnum() or c in "-_")[:40]
+    return CALIB_DIR / f"{safe(voice_id)}_{safe(model_id)}.json"
+
+
+def _load_calib(voice_id: str, model_id: str):
+    p = _calib_path(voice_id, model_id)
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
+
+
+def _interpolate_speed(med_syl_ms: float, points: list) -> float:
+    """Interpola la velocidad a partir de los puntos de calibración.
+    Los puntos están ordenados: mayor med_syl_ms = menor speed."""
+    pts = sorted(points, key=lambda p: p["med_syl_ms"], reverse=True)
+    for i in range(len(pts) - 1):
+        lo, hi = pts[i], pts[i + 1]
+        if lo["med_syl_ms"] >= med_syl_ms >= hi["med_syl_ms"]:
+            span = hi["med_syl_ms"] - lo["med_syl_ms"]
+            if span == 0:
+                return round(lo["speed"], 2)
+            t = (med_syl_ms - lo["med_syl_ms"]) / span
+            return round(lo["speed"] + t * (hi["speed"] - lo["speed"]), 2)
+    # Extrapolación fuera del rango
+    return round(pts[0]["speed"] if med_syl_ms > pts[0]["med_syl_ms"] else pts[-1]["speed"], 2)
+
+# ════════════════════════════════════════════════════════════════════════════
+
+
 class CalibracionRequest(BaseModel):
     audio_b64: str
-    filename: str = "audio.mp3"
-    seccion: str = "intro"   # "intro" | "meditacion" | "afirmaciones"
+    filename: str  = "audio.mp3"
+    seccion: str   = "intro"   # "intro" | "meditacion" | "afirmaciones"
+    voice_id: str  = ""        # para usar tabla de calibración de referencia
+    model_id: str  = ""
+
+
+class CalibReferenciasRequest(BaseModel):
+    api_key: str
+    voice_id: str
+    model_id: str       = "eleven_multilingual_v2"
+    language_code: str  = "es"
 
 
 @router.post("/calibrar-voz")
@@ -901,42 +1039,47 @@ def calibrar_voz(body: CalibracionRequest):
         break_interrogacion = round(break_punto, 2)
         break_guion         = round(break_coma, 2)
 
-        # ── Velocidad de voz ────────────────────────────────────────
+        # ── Velocidad de voz: timing silábico con calibración de referencia ──
         total_silencio_ms = sum(end - start for start, end in silencios)
         habla_ms   = max(dur_ms - total_silencio_ms, 0)
         ratio_habla = habla_ms / dur_ms
 
-        # Detectar segmentos a nivel de frase (pausas > 300ms) para estimar
-        # duración típica de bloque hablado — eso sí cambia con la velocidad.
-        silencios_frase = detect_silence(seg, min_silence_len=300, silence_thresh=thresh)
+        # Medir intervalo silábico mediano del audio subido
+        med_syl_ms = _medir_silabico_seg(seg, silencios)
 
-        segmentos_voz = []
-        prev_end = 0
-        for start, end in sorted(silencios_frase):
-            chunk = start - prev_end
-            if chunk > 100:
-                segmentos_voz.append(chunk)
-            prev_end = end
-        if prev_end < dur_ms - 100:
-            segmentos_voz.append(dur_ms - prev_end)
+        # Cargar tabla de calibración de esta voz si existe
+        calib = _load_calib(body.voice_id, body.model_id) if body.voice_id else None
 
-        # Quedarse con segmentos "frase": 150 ms – 3 000 ms
-        segmentos_frase = [d for d in segmentos_voz if 150 <= d <= 3000]
-
-        if len(segmentos_frase) >= 3:
-            # Mediana robusta ante outliers
-            mediana_seg = statistics.median(segmentos_frase)
-            # Baseline empírico: un hablante/TTS a speed=1.0 produce frases de ~750 ms
-            # entre pausas ≥ 300 ms. A menor speed → frases más largas → speed_base baja.
-            speed_base = 750.0 / mediana_seg
+        if med_syl_ms > 0:
+            if calib and len(calib.get("points", [])) >= 5:
+                # Interpolación exacta sobre la tabla de referencia
+                speed_base = _interpolate_speed(med_syl_ms, calib["points"])
+            else:
+                # Estimación genérica (sin referencias): baseline 185 ms/sílaba
+                speed_base = 185.0 / med_syl_ms
         else:
-            # Fallback: usar densidad de silencios cortos detectados
-            silencios_cortos = len([d for d in duraciones if d < 500])
-            densidad = silencios_cortos / (dur_ms / 1000)  # eventos/s
-            # ~1.5 eventos/s → speed 1.0; escala lineal
-            speed_base = densidad / 1.5
+            speed_base = 0.93  # fallback cuando no hay datos suficientes
 
         speed = round(max(0.70, min(speed_base, 1.20)), 2)
+
+        # ── Ajuste de breaks: restar las pausas naturales de la voz ──────────
+        # El SSML break = pausa deseada − lo que la voz ya inserta sola.
+        # Esto evita pausas dobles cuando ElevenLabs ya pausa en puntuación.
+        if calib and calib.get("natural_pauses"):
+            np = calib["natural_pauses"]
+            nat_coma    = np.get("natural_coma_ms",    120) / 1000
+            nat_punto   = np.get("natural_punto_ms",   380) / 1000
+            nat_parrafo = np.get("natural_parrafo_ms", 850) / 1000
+            break_coma    = round(max(0.0, break_coma    - nat_coma),    2)
+            break_punto   = round(max(0.0, break_punto   - nat_punto),   2)
+            break_parrafo = round(max(0.0, break_parrafo - nat_parrafo), 2)
+            # Re-derivar proporcionales
+            break_suspensivos   = round(min(break_punto * 1.15, 3.0), 2)
+            break_dos_puntos    = round(max(break_coma  * 0.80, 0.0), 2)
+            break_punto_coma    = round((break_coma + break_punto) / 2,  2)
+            break_exclamacion   = round(break_punto, 2)
+            break_interrogacion = round(break_punto, 2)
+            break_guion         = round(break_coma,  2)
 
         # Solo se devuelve el parámetro de velocidad de la sección solicitada
         SPEED_KEY = {
@@ -964,13 +1107,120 @@ def calibrar_voz(body: CalibracionRequest):
                 "duracion_s":           round(dur_ms / 1000, 1),
                 "ratio_habla":          round(ratio_habla, 3),
                 "silencios_detectados": len(duraciones),
-                "seg_frase_avg_ms":     round(statistics.median(segmentos_frase)) if segmentos_frase else 0,
+                "med_syl_ms":           med_syl_ms,
+                "calibrado":            bool(calib and len(calib.get("points", [])) >= 5),
                 "pausa_media_avg_ms":   round(avg_medio),
                 "pausa_larga_avg_ms":   round(avg_largo),
             },
         }
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+# ── Endpoints de generación y consulta de referencias ───────────────────────
+
+@router.post("/calibrar-voz/referencias")
+def generar_referencias(body: CalibReferenciasRequest):
+    """
+    Genera 11 audios de referencia (speed 0.70–1.20) con la voz configurada
+    y 1 audio adicional para medir pausas naturales.
+    Guarda la tabla de calibración en disco para uso posterior.
+    Tiempo estimado: 20–40 s según latencia de ElevenLabs.
+    """
+    if not PYDUB_AVAILABLE:
+        raise HTTPException(status_code=500, detail="pydub no disponible")
+
+    points, errors = [], []
+
+    for speed in SPEEDS_REFERENCIA:
+        try:
+            resp = requests.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{body.voice_id}",
+                headers={"xi-api-key": body.api_key, "Content-Type": "application/json"},
+                json={
+                    "text": TEXTO_REF_VELOCIDAD,
+                    "model_id": body.model_id,
+                    "language_code": body.language_code,
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75,
+                        "style": 0.0,
+                        "use_speaker_boost": False,
+                        "speed": speed,
+                    },
+                },
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                errors.append({"speed": speed, "error": f"HTTP {resp.status_code}"})
+                continue
+            med = _medir_silabico_bytes(resp.content, ".mp3")
+            if med > 0:
+                points.append({"speed": speed, "med_syl_ms": med})
+            else:
+                errors.append({"speed": speed, "error": "No se detectaron sílabas suficientes"})
+        except Exception as exc:
+            errors.append({"speed": speed, "error": str(exc)})
+
+    if len(points) < 5:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Solo {len(points)} puntos de calibración obtenidos. Errores: {errors}",
+        )
+
+    # Pausas naturales de la voz a speed=1.0 (para ajuste de breaks)
+    natural_pauses = {}
+    try:
+        resp_p = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{body.voice_id}",
+            headers={"xi-api-key": body.api_key, "Content-Type": "application/json"},
+            json={
+                "text": TEXTO_REF_PAUSAS,
+                "model_id": body.model_id,
+                "language_code": body.language_code,
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": False,
+                    "speed": 1.0,
+                },
+            },
+            timeout=30,
+        )
+        if resp_p.status_code == 200:
+            natural_pauses = _medir_pausas_naturales_bytes(resp_p.content, ".mp3")
+    except Exception:
+        pass  # las pausas naturales son opcionales
+
+    calib_data = {
+        "voice_id":      body.voice_id,
+        "model_id":      body.model_id,
+        "language_code": body.language_code,
+        "generated_at":  time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "points":        points,
+        "natural_pauses": natural_pauses,
+    }
+    _calib_path(body.voice_id, body.model_id).write_text(
+        json.dumps(calib_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return {"ok": True, "points": points, "natural_pauses": natural_pauses, "errors": errors}
+
+
+@router.get("/calibrar-voz/referencias")
+def estado_referencias(voice_id: str, model_id: str):
+    """Devuelve el estado de las referencias de calibración para una voz."""
+    data = _load_calib(voice_id, model_id)
+    if data:
+        return {
+            "calibrated":   True,
+            "points_count": len(data.get("points", [])),
+            "has_pauses":   bool(data.get("natural_pauses")),
+            "generated_at": data.get("generated_at"),
+        }
+    return {"calibrated": False, "points_count": 0, "has_pauses": False, "generated_at": None}
+
+# ────────────────────────────────────────────────────────────────────────────
 
 
 @router.get("/voices")

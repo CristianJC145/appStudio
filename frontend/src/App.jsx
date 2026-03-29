@@ -80,6 +80,35 @@ const MODULE_ICONS = {
   imagenes:   IconImage,
 }
 
+/* ── Module disabled screen ──────────────────────────────────── */
+function ModuleDisabled({ name }) {
+  const navigate = useNavigate()
+  return (
+    <div className="mod-disabled">
+      <div className="mod-disabled-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <h2 className="mod-disabled-title">Módulo desactivado</h2>
+      <p className="mod-disabled-desc">
+        <strong>{name}</strong> ha sido desactivado por el administrador.<br/>Contacta al equipo si crees que es un error.
+      </p>
+      <button className="mod-disabled-btn" onClick={() => navigate("/studio")}>
+        Volver al Dashboard
+      </button>
+    </div>
+  )
+}
+
+/* ── Module gate: blocks disabled modules ────────────────────── */
+function ModuleGate({ id, name, states, children }) {
+  // While states haven't loaded yet (empty object) allow access to avoid flashing
+  const hasLoaded = Object.keys(states).length > 0
+  const disabled  = hasLoaded && states[id] === false
+  return disabled ? <ModuleDisabled name={name} /> : children
+}
+
 /* ── Auth guard ──────────────────────────────────────────────── */
 function RequireAuth({ children }) {
   const token = localStorage.getItem("studio_token")
@@ -104,14 +133,22 @@ function Shell() {
     return () => document.body.classList.remove("dashboard-body")
   }, [])
 
-  // Fetch module enabled/disabled states
-  useEffect(() => {
+  // Fetch module enabled/disabled states — also poll every 60 s so changes propagate
+  const fetchModuleStates = () => {
     const token = localStorage.getItem("studio_token")
     fetch(`${API}/api/admin/modules`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : {})
       .then(data => setModuleStates(data))
       .catch(() => {})
-  }, [])
+  }
+  useEffect(() => {
+    fetchModuleStates()
+    const id = setInterval(fetchModuleStates, 60_000)
+    // Refresh immediately when the tab regains focus
+    const onFocus = () => fetchModuleStates()
+    window.addEventListener("focus", onFocus)
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Heartbeat every 30 s so backend can count active users
   useEffect(() => {
@@ -268,7 +305,7 @@ function Shell() {
       <main className="dash-content">
         <Routes>
           <Route index                  element={<ModuleHub />} />
-          <Route path="guiones/*"       element={<GuionesModule />} />
+          <Route path="guiones/*"       element={<ModuleGate id="guiones" name="Automatización de Audios" states={moduleStates}><GuionesModule /></ModuleGate>} />
           <Route path="admin"           element={isAdmin ? <AdminPanel /> : <Navigate to="/studio" replace />} />
         </Routes>
       </main>

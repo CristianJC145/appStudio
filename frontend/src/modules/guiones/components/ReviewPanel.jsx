@@ -146,7 +146,7 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
 
       <div className="review-card-text" style={{ whiteSpace: "pre-line" }}>
         {(text || "…")
-          .replace(/<break[^>]*\/>/g, "")
+          .replace(/<break[^>]*\/>/g, "\n")
           .replace(/[ \t]+/g, " ")
           .replace(/ \n/g, "\n")
           .replace(/\n /g, "\n")

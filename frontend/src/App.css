@@ -662,14 +662,19 @@ body.dashboard-body #root {
   opacity: 0; transition: opacity var(--t);
 }
 
-.hub-card:hover:not(.hub-card--soon) {
+.hub-card:hover:not(.hub-card--soon):not(.hub-card--disabled) {
   border-color: var(--bd-mid);
   transform: translateY(-2px);
   box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 16px rgba(212,168,67,0.07);
 }
-.hub-card:hover:not(.hub-card--soon)::before { opacity: 1; }
+.hub-card:hover:not(.hub-card--soon):not(.hub-card--disabled)::before { opacity: 1; }
 
-.hub-card--soon { cursor: default; opacity: 0.42; }
+.hub-card--soon     { cursor: default; opacity: 0.42; }
+.hub-card--disabled {
+  cursor: default; opacity: 0.38;
+  filter: grayscale(0.4);
+  border-color: rgba(255,80,80,0.12) !important;
+}
 
 .hub-card-top { display: flex; align-items: center; justify-content: space-between; }
 
@@ -694,6 +699,10 @@ body.dashboard-body #root {
 .hub-card-status--soon {
   background: rgba(0,0,0,0.50); color: var(--tx3);
   border: 1px solid var(--bd-dim);
+}
+.hub-card-status--disabled {
+  background: rgba(255,80,80,0.08); color: #ff9898;
+  border: 1px solid rgba(255,80,80,0.22);
 }
 
 .hub-card-body { flex: 1; }

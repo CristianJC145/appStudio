@@ -43,16 +43,20 @@ def _ensure_tables():
         print(f"[admin] DB init warning: {e}")
 
 
+# All known module IDs — single source of truth for defaults
+KNOWN_MODULES = ["guiones", "miniaturas", "bucles", "imagenes"]
+
 # ── Module management ────────────────────────────────────────────────────
 @router.get("/modules")
 def get_modules():
-    """Returns {module_id: bool} for all stored states. Modules not in DB are enabled by default."""
+    """Always returns all known modules. Modules not in DB default to enabled=True."""
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute("SELECT module_id, enabled FROM module_config")
         rows = cur.fetchall()
     conn.close()
-    return {r["module_id"]: bool(r["enabled"]) for r in rows}
+    db_states = {r["module_id"]: bool(r["enabled"]) for r in rows}
+    return {mod: db_states.get(mod, True) for mod in KNOWN_MODULES}
 
 
 @router.patch("/modules/{module_id}")

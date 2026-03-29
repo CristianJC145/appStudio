@@ -304,7 +304,7 @@ function Shell() {
       {/* ══ CONTENT ═════════════════════════════════════ */}
       <main className="dash-content">
         <Routes>
-          <Route index                  element={<ModuleHub />} />
+          <Route index                  element={<ModuleHub moduleStates={moduleStates} />} />
           <Route path="guiones/*"       element={<ModuleGate id="guiones" name="Automatización de Audios" states={moduleStates}><GuionesModule /></ModuleGate>} />
           <Route path="admin"           element={isAdmin ? <AdminPanel /> : <Navigate to="/studio" replace />} />
         </Routes>

@@ -82,6 +82,11 @@ function CalibracionModal({ onClose, onApply }) {
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 30 * 1024 * 1024) {
+      setErrorMsg("El archivo supera el límite de 30 MB. Usa un audio más corto.")
+      setEstado("error")
+      return
+    }
     setFileName(file.name)
     setEstado("analizando")
     setErrorMsg("")

@@ -846,6 +846,10 @@ def calibrar_voz(body: CalibracionRequest):
     except Exception:
         raise HTTPException(status_code=422, detail="audio_b64 no es base64 válido")
 
+    MAX_BYTES = 30 * 1024 * 1024  # 30 MB
+    if len(audio_bytes) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="El audio supera el límite de 30 MB")
+
     # Guardar en temp
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(audio_bytes)
@@ -912,9 +916,10 @@ def calibrar_voz(body: CalibracionRequest):
         else:
             speed_base = 0.85
 
-        intro_speed = round(min(speed_base + 0.04, 1.20), 2)
-        afirm_speed = round(speed_base, 2)
-        medit_speed = round(max(speed_base - 0.04, 0.70), 2)
+        # Orden correcto: intro (más rápido) > meditación > afirmaciones (más lento)
+        intro_speed = round(min(speed_base + 0.05, 1.20), 2)
+        medit_speed = round(speed_base, 2)
+        afirm_speed = round(max(speed_base - 0.05, 0.70), 2)
 
         return {
             "sugerencias": {

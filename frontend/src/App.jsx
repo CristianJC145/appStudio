@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom"
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom"
 import Landing from "./pages/Landing"
 import StudioLanding from "./pages/StudioLanding"
+import Login from "./pages/Login"
 import LandingHome      from "./pages/landing/Home"
 import LandingNosotros  from "./pages/landing/Nosotros"
 import LandingCanal     from "./pages/landing/Canal"
@@ -70,6 +71,12 @@ const MODULE_ICONS = {
   imagenes:   IconImage,
 }
 
+/* ── Auth guard ──────────────────────────────────────────────── */
+function RequireAuth({ children }) {
+  const token = localStorage.getItem("studio_token")
+  return token ? children : <Navigate to="/login" replace />
+}
+
 /* ── Shell ───────────────────────────────────────────────────── */
 function Shell() {
   const navigate   = useNavigate()
@@ -119,6 +126,16 @@ function Shell() {
             <span className="topbar-dot" />
             <span className="topbar-status-label">En línea</span>
           </div>
+          <button
+            className="topbar-logout-btn"
+            onClick={() => { localStorage.removeItem("studio_token"); localStorage.removeItem("studio_user"); navigate("/login") }}
+            title="Cerrar sesión"
+            aria-label="Cerrar sesión"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -202,7 +219,8 @@ export default function App() {
           <Route path="contenido"         element={<LandingContenido />} />
           <Route path="comunidad"         element={<LandingComunidad />} />
         </Route>
-        <Route path="/studio/*" element={<Shell />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/studio/*" element={<RequireAuth><Shell /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   )

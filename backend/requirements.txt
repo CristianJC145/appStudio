@@ -4,3 +4,6 @@ pydub==0.25.1
 audioop-lts==0.2.1
 requests==2.32.3
 python-multipart==0.0.9
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+PyMySQL==1.1.1

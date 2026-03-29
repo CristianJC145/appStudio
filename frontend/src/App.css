@@ -264,6 +264,22 @@ body.dashboard-body #root {
   color: var(--tx3); letter-spacing: 0.06em;
 }
 
+.topbar-logout-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: var(--tx3);
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.topbar-logout-btn:hover {
+  color: var(--accent-gold);
+  background: rgba(212,168,67,0.08);
+  border-color: rgba(212,168,67,0.22);
+}
+
 /* ── SIDEBAR ────────────────────────────── */
 .sidebar {
   grid-area: sidebar;
@@ -680,7 +696,8 @@ textarea {
   border: 1px solid var(--bd-dim);
   border-radius: var(--r-sm);
   color: var(--tx); font-family: var(--ff-body); font-size: 0.875rem;
-  padding: 9px 13px; outline: none;
+  padding: 9px 13px;
+  outline: none;
   transition: border-color var(--t), box-shadow var(--t), background var(--t);
 }
 

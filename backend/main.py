@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers import guiones
 from routers import auth
+from routers import admin
 try:
     from routers.guiones import PYDUB_AVAILABLE
 except ImportError:
@@ -30,6 +31,7 @@ app.add_middleware(
 # ── Módulos ───────────────────────────────────────────────────
 app.include_router(guiones.router)
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 # ── Health global ─────────────────────────────────────────────
 @app.get("/api/health")

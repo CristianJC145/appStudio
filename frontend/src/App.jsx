@@ -10,9 +10,12 @@ import LandingContenido from "./pages/landing/Contenido"
 import LandingComunidad from "./pages/landing/Comunidad"
 import ModuleHub from "./components/ModuleHub"
 import GuionesModule from "./modules/guiones"
+import AdminPanel from "./pages/AdminPanel"
 import modules from "./modules/registry"
 import logoImg from "./assets/logo.png"
 import "./App.css"
+
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 /* ── Inline SVG icons ────────────────────────────────────────── */
 const IconGrid = () => (
@@ -64,6 +67,12 @@ const IconExpand = () => (
   </svg>
 )
 
+const IconShield = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+)
+
 const MODULE_ICONS = {
   guiones:    IconWave,
   miniaturas: IconMonitor,
@@ -84,17 +93,48 @@ function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const storedUser  = localStorage.getItem("studio_user")
+  const currentUser = storedUser ? JSON.parse(storedUser) : null
+  const isAdmin     = currentUser?.role === "admin"
+
+  const [moduleStates, setModuleStates] = useState({})
+
   useEffect(() => {
     document.body.classList.add("dashboard-body")
     return () => document.body.classList.remove("dashboard-body")
   }, [])
 
-  const isHub      = location.pathname === "/studio" || location.pathname === "/studio/"
-  const activeMod  = modules.find(m => location.pathname.startsWith(m.path))
+  // Fetch module enabled/disabled states
+  useEffect(() => {
+    const token = localStorage.getItem("studio_token")
+    fetch(`${API}/api/admin/modules`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setModuleStates(data))
+      .catch(() => {})
+  }, [])
+
+  // Heartbeat every 30 s so backend can count active users
+  useEffect(() => {
+    const token = localStorage.getItem("studio_token")
+    const ping = () => fetch(`${API}/api/admin/heartbeat`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
+    ping()
+    const id = setInterval(ping, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const isHub       = location.pathname === "/studio" || location.pathname === "/studio/"
+  const isAdminPage = location.pathname.startsWith("/studio/admin")
+  const activeMod   = modules.find(m => location.pathname.startsWith(m.path))
+
+  const isModEnabled = (id) => moduleStates[id] !== false
 
   const breadcrumbs = [
     { label: "Dashboard", path: "/studio" },
-    ...(activeMod ? [{ label: activeMod.name, path: activeMod.path }] : []),
+    ...(isAdminPage  ? [{ label: "Administración", path: "/studio/admin" }] : []),
+    ...(activeMod    ? [{ label: activeMod.name,   path: activeMod.path  }] : []),
   ]
 
   const goTo = (path) => { navigate(path); setMobileOpen(false) }
@@ -126,16 +166,17 @@ function Shell() {
             <span className="topbar-dot" />
             <span className="topbar-status-label">En línea</span>
           </div>
-          <button
-            className="topbar-logout-btn"
-            onClick={() => { localStorage.removeItem("studio_token"); localStorage.removeItem("studio_user"); navigate("/login") }}
-            title="Cerrar sesión"
-            aria-label="Cerrar sesión"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+          {currentUser && (
+            <div className="topbar-user">
+              <div className="topbar-user-avatar">
+                {currentUser.username.charAt(0).toUpperCase()}
+              </div>
+              <div className="topbar-user-info">
+                <span className="topbar-user-name">{currentUser.username}</span>
+                {isAdmin && <span className="topbar-admin-badge">Admin</span>}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -161,29 +202,57 @@ function Shell() {
           <div className="sb-section-label sb-section-label--modules">Módulos</div>
 
           {modules.map(mod => {
-            const Icon    = MODULE_ICONS[mod.id] || IconGrid
+            const Icon     = MODULE_ICONS[mod.id] || IconGrid
             const isActive = location.pathname.startsWith(mod.path)
-            const isSoon  = mod.status === "coming-soon"
+            const isSoon   = mod.status === "coming-soon"
+            const disabled = !isModEnabled(mod.id)
             return (
               <button
                 key={mod.id}
-                className={`sb-item${isActive ? " active" : ""}${isSoon ? " sb-item--soon" : ""}`}
-                onClick={() => !isSoon && goTo(mod.path)}
-                title={isSoon ? `${mod.name} — Próximamente` : mod.name}
-                aria-disabled={isSoon}
+                className={`sb-item${isActive ? " active" : ""}${isSoon ? " sb-item--soon" : ""}${disabled ? " sb-item--disabled" : ""}`}
+                onClick={() => !isSoon && !disabled && goTo(mod.path)}
+                title={disabled ? `${mod.name} — Desactivado` : isSoon ? `${mod.name} — Próximamente` : mod.name}
+                aria-disabled={isSoon || disabled}
               >
                 <span className="sb-item-icon"><Icon /></span>
                 <span className="sb-item-label">{mod.name}</span>
-                {isSoon && <span className="sb-soon-badge">Soon</span>}
+                {isSoon   && <span className="sb-soon-badge">Soon</span>}
+                {disabled && <span className="sb-soon-badge sb-off-badge">Off</span>}
               </button>
             )
           })}
+
+          {isAdmin && (
+            <>
+              <div className="sb-section-label sb-section-label--modules">Admin</div>
+              <button
+                className={`sb-item${isAdminPage ? " active" : ""}`}
+                onClick={() => goTo("/studio/admin")}
+                title="Panel de administración"
+              >
+                <span className="sb-item-icon"><IconShield /></span>
+                <span className="sb-item-label">Administración</span>
+              </button>
+            </>
+          )}
         </nav>
 
         {/* Collapse toggle */}
         <button className="sb-collapse-btn" onClick={() => setCollapsed(p => !p)} aria-label="Colapsar sidebar">
           {collapsed ? <IconExpand /> : <IconCollapse />}
           <span className="sb-item-label">Colapsar</span>
+        </button>
+
+        {/* Logout */}
+        <button
+          className="sb-logout-btn"
+          onClick={() => { localStorage.removeItem("studio_token"); localStorage.removeItem("studio_user"); navigate("/login") }}
+          title="Cerrar sesión"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span className="sb-item-label">Cerrar sesión</span>
         </button>
 
         {/* Footer */}
@@ -200,6 +269,7 @@ function Shell() {
         <Routes>
           <Route index                  element={<ModuleHub />} />
           <Route path="guiones/*"       element={<GuionesModule />} />
+          <Route path="admin"           element={isAdmin ? <AdminPanel /> : <Navigate to="/studio" replace />} />
         </Routes>
       </main>
 

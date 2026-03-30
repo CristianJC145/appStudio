@@ -53,9 +53,11 @@ CARPETA_SALIDA = Path("salida")
 CARPETA_TEMP.mkdir(exist_ok=True)
 CARPETA_SALIDA.mkdir(exist_ok=True)
 
-# ── Calibración de voz por referencia ─────────────────────────────────────
-CALIB_DIR = Path("data") / "voice_calibrations"
+# ── Persistencia: calibraciones y configuraciones ──────────────────────────
+CALIB_DIR   = Path("data") / "voice_calibrations"
+CONFIG_DIR  = Path("data") / "configs"
 CALIB_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 SPEEDS_REFERENCIA = [0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00]
 
@@ -1334,6 +1336,38 @@ def generar_referencias(body: CalibReferenciasRequest):
     )
     return {"ok": True, "points": points, "natural_pauses": natural_pauses, "errors": errors}
 
+
+# ── Config persistence ───────────────────────────────────────────────────────
+
+class ConfigBody(BaseModel):
+    config: dict
+
+def _config_path_for_key(api_key: str) -> Path:
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:24]
+    return CONFIG_DIR / f"{key_hash}.json"
+
+@router.get("/config")
+def get_config(api_key: str = ""):
+    if not api_key:
+        raise HTTPException(status_code=422, detail="api_key requerido")
+    path = _config_path_for_key(api_key)
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+@router.post("/config")
+def save_config(body: ConfigBody):
+    api_key = body.config.get("api_key", "")
+    if not api_key:
+        raise HTTPException(status_code=422, detail="api_key requerido en config")
+    path = _config_path_for_key(api_key)
+    path.write_text(json.dumps(body.config, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+# ── Calibración referencias ──────────────────────────────────────────────────
 
 @router.get("/calibrar-voz/referencias")
 def estado_referencias(voice_id: str, model_id: str):

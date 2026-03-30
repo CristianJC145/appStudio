@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import ConfigPanel from "./components/ConfigPanel"
 import ScriptEditor from "./components/ScriptEditor"
 import GenerationProgress from "./components/GenerationProgress"
@@ -54,14 +54,34 @@ const TABS = [
   { id: "history",  label: "Historial" },
 ]
 
+const API = import.meta.env.VITE_API_URL
+
 export default function GuionesModule() {
   const [tab, setTab] = useState("editor")
+
+  // Inicializar desde localStorage (síncrono → render inmediato sin flash)
   const [config, setConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("medi_config")
       return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG
     } catch { return DEFAULT_CONFIG }
   })
+
+  // Al montar: sincronizar desde el servidor (compartido entre usuarios con misma api_key)
+  useEffect(() => {
+    const apiKey = config.api_key
+    if (!apiKey) return
+    fetch(`${API}/api/config?api_key=${encodeURIComponent(apiKey)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && Object.keys(data).length > 0) {
+          const merged = { ...DEFAULT_CONFIG, ...data }
+          setConfig(merged)
+          localStorage.setItem("medi_config", JSON.stringify(merged))
+        }
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [guion, setGuion]   = useState("")
   const [nombre, setNombre] = useState("meditacion")
@@ -94,6 +114,14 @@ export default function GuionesModule() {
   const saveConfig = (next) => {
     setConfig(next)
     localStorage.setItem("medi_config", JSON.stringify(next))
+    // Persistir en servidor (compartido entre usuarios con misma api_key)
+    if (next.api_key) {
+      fetch(`${API}/api/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: next }),
+      }).catch(() => {})
+    }
   }
 
   const startGeneration = async () => {

@@ -202,6 +202,7 @@ def register(body: RegisterRequest):
         raise HTTPException(status_code=409, detail="El nombre de usuario ya está en uso")
     try:
         user = _create_user(body.username, body.email, body.password, role="user")
+        print(f"usuario", user)
     except Exception as e:
         if "email" in str(e):
             raise HTTPException(status_code=409, detail="El correo ya está registrado")

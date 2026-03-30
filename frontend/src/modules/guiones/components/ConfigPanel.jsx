@@ -238,8 +238,14 @@ function CalibracionModal({ onClose, onApply, config = {} }) {
                   ) : refStatus?.calibrated ? (
                     <>
                       <span className="calib-ref-icon">✓</span>
-                      <span><strong>{refStatus.points_count} puntos</strong> de calibración — precisión exacta</span>
+                      <span><strong>{refStatus.points_count} puntos</strong> — sincronización exacta</span>
                       <button className="calib-ref-btn" onClick={generarReferencias} style={{ marginLeft: "auto" }}>↺ Recalibrar</button>
+                    </>
+                  ) : refStatus?.needs_regen ? (
+                    <>
+                      <span className="calib-ref-icon">⚠</span>
+                      <span>Referencias desactualizadas — regenerar para precisión exacta</span>
+                      <button className="calib-ref-btn" onClick={generarReferencias}>↺ Actualizar</button>
                     </>
                   ) : (
                     <>

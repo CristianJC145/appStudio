@@ -59,14 +59,15 @@ CONFIG_DIR  = Path("data") / "configs"
 CALIB_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-SPEEDS_REFERENCIA = [0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00]
+# Puntos de referencia: cubre el rango usado + un poco más para no extrapolar en los bordes.
+# El rango práctico es 0.89–1.0, así que los puntos van de 0.86 a 1.02.
+SPEEDS_REFERENCIA = [0.86, 0.88, 0.89, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02]
 
-# Rango "natural" de ElevenLabs: zona donde la voz suena bien sin procesar.
-# Fuera de este rango se usa tempo (ffmpeg atempo) en vez de seguir bajando/subiendo
-# el speed de ElevenLabs, preservando la calidad vocal.
-# Ejemplo: audio muy lento → speed=0.93, tempo=0.82 (mejor que speed=0.75, tempo=1.0)
-SPEED_NATURAL_MIN = 0.93
-SPEED_NATURAL_MAX = 1.01
+# Rango "natural": el speed de ElevenLabs se mantiene aquí.
+# Todo lo que queda fuera se compensa con tempo (ffmpeg atempo).
+# Rango práctico real: 0.89–1.0.
+SPEED_NATURAL_MIN = 0.89
+SPEED_NATURAL_MAX = 1.00
 
 # Sin puntuación → mide velocidad pura (sílabas)
 TEXTO_REF_VELOCIDAD = (
@@ -1374,13 +1375,17 @@ def estado_referencias(voice_id: str, model_id: str):
     """Devuelve el estado de las referencias de calibración para una voz."""
     data = _load_calib(voice_id, model_id)
     if data:
+        points = data.get("points", [])
+        whisper_ready = any("sils_per_sec" in p for p in points)
         return {
-            "calibrated":   True,
-            "points_count": len(data.get("points", [])),
-            "has_pauses":   bool(data.get("natural_pauses")),
-            "generated_at": data.get("generated_at"),
+            "calibrated":    whisper_ready,   # True solo si tiene el formato nuevo (Whisper)
+            "needs_regen":   not whisper_ready,
+            "points_count":  len(points),
+            "has_pauses":    bool(data.get("natural_pauses")),
+            "generated_at":  data.get("generated_at"),
         }
-    return {"calibrated": False, "points_count": 0, "has_pauses": False, "generated_at": None}
+    return {"calibrated": False, "needs_regen": False, "points_count": 0,
+            "has_pauses": False, "generated_at": None}
 
 # ────────────────────────────────────────────────────────────────────────────
 

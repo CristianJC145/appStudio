@@ -204,6 +204,8 @@ def register(body: RegisterRequest):
         user = _create_user(body.username, body.email, body.password, role="user")
         print(f"usuario", user)
     except Exception as e:
+        print(f"usuarioooooooooooooooooooooooooooo")
+        print(f"usuario", user)
         if "email" in str(e):
             raise HTTPException(status_code=409, detail="El correo ya está registrado")
         raise HTTPException(status_code=500, detail="Error al crear usuario")

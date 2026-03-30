@@ -57,14 +57,14 @@ CARPETA_SALIDA.mkdir(exist_ok=True)
 CALIB_DIR = Path("data") / "voice_calibrations"
 CALIB_DIR.mkdir(parents=True, exist_ok=True)
 
-SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
+SPEEDS_REFERENCIA = [0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00]
 
 # Rango "natural" de ElevenLabs: zona donde la voz suena bien sin procesar.
 # Fuera de este rango se usa tempo (ffmpeg atempo) en vez de seguir bajando/subiendo
 # el speed de ElevenLabs, preservando la calidad vocal.
 # Ejemplo: audio muy lento → speed=0.93, tempo=0.82 (mejor que speed=0.75, tempo=1.0)
 SPEED_NATURAL_MIN = 0.93
-SPEED_NATURAL_MAX = 1.05
+SPEED_NATURAL_MAX = 1.01
 
 # Sin puntuación → mide velocidad pura (sílabas)
 TEXTO_REF_VELOCIDAD = (

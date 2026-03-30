@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react"
 //  Player de audio con controles de salto
 // ─────────────────────────────────────────────────────────────
 function AudioPlayer({ src }) {
-  const audioRef                = useRef(null)
+  const audioRef    = useRef(null)
+  const seekingRef  = useRef(false)   // true mientras el usuario arrastra el slider
   const [playing, setPlaying]   = useState(false)
   const [current, setCurrent]   = useState(0)
   const [duration, setDuration] = useState(0)
   const [speed, setSpeed]       = useState(1)
-  const [dragVal, setDragVal]   = useState(null) // posición visual mientras arrastra
   const SPEEDS = [1, 1.5, 2]
 
   useEffect(() => {
@@ -19,10 +19,9 @@ function AudioPlayer({ src }) {
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
-    setDragVal(null)
     setSpeed(1)
     a.playbackRate = 1
-    a.load() // fuerza carga de metadatos en desktop sin interacción previa
+    a.load()
   }, [src])
 
   const fmt = (s) => {
@@ -37,26 +36,27 @@ function AudioPlayer({ src }) {
     setPlaying(p => !p)
   }
 
-  // Usa `duration` (state) — nunca a.duration que puede ser NaN en desktop
+  // Usa a.duration (siempre fresco del elemento) — nunca el state que puede ser stale
   const skip = (secs) => {
     const a = audioRef.current
-    if (!a || !duration) return
-    const next = Math.max(0, Math.min(duration, a.currentTime + secs))
-    a.currentTime = next
-    setCurrent(next)
+    if (!a) return
+    const dur = a.duration
+    if (!dur || isNaN(dur)) return
+    a.currentTime = Math.max(0, Math.min(dur, a.currentTime + secs))
+    setCurrent(a.currentTime)
   }
 
-  // En desktop onChange dispara en cada pixel del drag → solo actualiza visual
-  const onSeekChange = (e) => setDragVal(parseFloat(e.target.value))
-
-  // Al soltar (desktop mouseup / mobile touchend) → commit al audio
-  const onSeekCommit = (e) => {
+  // onChange: actualiza currentTime directamente (funciona en desktop y mobile).
+  // seekingRef evita que onTimeUpdate sobreescriba current mientras se arrastra.
+  const onSeekChange = (e) => {
     const val = parseFloat(e.target.value)
-    const a = audioRef.current
-    if (a) a.currentTime = val
+    seekingRef.current = true
+    if (audioRef.current) audioRef.current.currentTime = val
     setCurrent(val)
-    setDragVal(null)
   }
+
+  // Al soltar: libera seekingRef (garantiza sincronía aunque onMouseUp no dispare en el elemento)
+  const onSeekEnd = () => { seekingRef.current = false }
 
   const cycleSpeed = () => {
     const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
@@ -70,9 +70,9 @@ function AudioPlayer({ src }) {
         ref={audioRef}
         src={src}
         preload="auto"
-        onTimeUpdate={e => { if (dragVal === null) setCurrent(e.target.currentTime) }}
+        onTimeUpdate={e => { if (!seekingRef.current) setCurrent(e.target.currentTime) }}
         onLoadedMetadata={e => setDuration(e.target.duration)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); seekingRef.current = false }}
       />
 
       <input
@@ -81,10 +81,10 @@ function AudioPlayer({ src }) {
         min={0}
         max={duration || 0}
         step={0.1}
-        value={dragVal !== null ? dragVal : current}
+        value={current}
         onChange={onSeekChange}
-        onMouseUp={onSeekCommit}
-        onTouchEnd={onSeekCommit}
+        onMouseUp={onSeekEnd}
+        onTouchEnd={onSeekEnd}
       />
 
       {/* Controles */}
@@ -119,6 +119,22 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
     }
     prevAudioUrl.current = audioUrl ?? null
   }, [audioUrl])
+
+  const handleDownload = async () => {
+    if (!audioUrl) return
+    const fullUrl = `${import.meta.env.VITE_API_URL}${audioUrl}`
+    const filename = audioUrl.split("/").pop() || `audio_${index + 1}.wav`
+    try {
+      const res  = await fetch(fullUrl)
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
 
   const cancelEdit = () => setEditing(false)
 
@@ -227,6 +243,19 @@ function ReviewCard({ section, index, label, text, audioUrl, decision, onDecisio
           style={{ marginLeft: "auto", opacity: 0.65 }}
         >
           ✎ Editar
+        </button>
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={handleDownload}
+          disabled={!audioUrl}
+          title="Descargar audio"
+          style={{ opacity: audioUrl ? 0.65 : 0.3 }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
         </button>
       </div>
     </div>

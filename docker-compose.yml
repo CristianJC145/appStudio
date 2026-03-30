@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Calibraciones de voz y configuraciones de usuarios
+      - medi_data:/app/data
+      # Modelo de Whisper (~244 MB) — evita re-descarga en cada redeploy
+      - whisper_cache:/root/.cache/whisper
+    restart: unless-stopped
+
+volumes:
+  medi_data:
+    driver: local
+  whisper_cache:
+    driver: local

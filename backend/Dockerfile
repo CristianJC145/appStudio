@@ -10,11 +10,12 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-# El directorio /app/data almacena calibraciones y configuraciones.
-# Montar como volumen para persistencia entre redespliegues:
-#   docker run -v medi_data:/app/data ...
 RUN mkdir -p /app/data/voice_calibrations /app/data/configs
-VOLUME /app/data
+
+# Pre-descargar el modelo Whisper durante el build para que el primer
+# request de calibración no tenga que descargarlo (244 MB).
+# Si el volumen whisper_cache ya contiene el modelo, este paso no hace nada.
+RUN python -c "import whisper; whisper.load_model('small')" || true
 
 EXPOSE 8000
 

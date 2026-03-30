@@ -59,10 +59,10 @@ const API = import.meta.env.VITE_API_URL
 export default function GuionesModule() {
   const [tab, setTab] = useState("editor")
 
-  // Inicializar desde localStorage (síncrono → render inmediato sin flash)
+  // Inicializar desde sessionStorage (síncrono → render inmediato sin flash)
   const [config, setConfig] = useState(() => {
     try {
-      const saved = localStorage.getItem("medi_config")
+      const saved = sessionStorage.getItem("medi_config")
       return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG
     } catch { return DEFAULT_CONFIG }
   })
@@ -77,7 +77,7 @@ export default function GuionesModule() {
         if (data && Object.keys(data).length > 0) {
           const merged = { ...DEFAULT_CONFIG, ...data }
           setConfig(merged)
-          localStorage.setItem("medi_config", JSON.stringify(merged))
+          sessionStorage.setItem("medi_config", JSON.stringify(merged))
         }
       })
       .catch(() => {})
@@ -105,24 +105,33 @@ export default function GuionesModule() {
   const [downloadUrl, setDownloadUrl]     = useState(null)
   const [durationMins, setDurationMins]   = useState(null)
   const [generating, setGenerating]       = useState(false)
-  const esRef = useRef(null)
+  const esRef        = useRef(null)
+  const saveTimerRef = useRef(null)
 
   const addEvent = useCallback((evt) => {
     setEvents(prev => [...prev, { ...evt, ts: Date.now() }])
   }, [])
 
-  const saveConfig = (next) => {
-    setConfig(next)
-    localStorage.setItem("medi_config", JSON.stringify(next))
-    // Persistir en servidor (compartido entre usuarios con misma api_key)
-    if (next.api_key) {
-      fetch(`${API}/api/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: next }),
-      }).catch(() => {})
-    }
-  }
+  // saveConfig acepta valor directo O función updater (igual que el setter de React).
+  // Guarda en localStorage inmediatamente y debounce el POST al servidor (1.5 s).
+  const saveConfig = useCallback((nextOrUpdater) => {
+    setConfig(prev => {
+      const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater
+      sessionStorage.setItem("medi_config", JSON.stringify(next))
+      // Debounce: evita un POST por cada movimiento de slider
+      if (next.api_key) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = setTimeout(() => {
+          fetch(`${API}/api/config`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config: next }),
+          }).catch(() => {})
+        }, 1500)
+      }
+      return next
+    })
+  }, [])
 
   const startGeneration = async () => {
     if (!config.api_key) return alert("Ingresa tu API Key de ElevenLabs")

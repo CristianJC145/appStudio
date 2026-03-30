@@ -406,7 +406,7 @@ export default function ConfigPanel({ config, setConfig }) {
 
   const [openSections, setOpenSections] = useState(() => {
     try {
-      const saved = localStorage.getItem("config_sections_open")
+      const saved = sessionStorage.getItem("config_sections_open")
       return saved ? JSON.parse(saved) : {}
     } catch { return {} }
   })
@@ -414,7 +414,7 @@ export default function ConfigPanel({ config, setConfig }) {
   const toggleSection = (title) => {
     setOpenSections(prev => {
       const next = { ...prev, [title]: !prev[title] }
-      localStorage.setItem("config_sections_open", JSON.stringify(next))
+      sessionStorage.setItem("config_sections_open", JSON.stringify(next))
       return next
     })
   }

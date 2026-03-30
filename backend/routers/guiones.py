@@ -31,6 +31,21 @@ try:
 except ImportError:
     PYDUB_AVAILABLE = False
 
+try:
+    import whisper as _whisper_lib
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
+
+_whisper_model = None
+WHISPER_MODEL_SIZE = "small"   # 244 MB, 99 idiomas, detección automática
+
+def _get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        _whisper_model = _whisper_lib.load_model(WHISPER_MODEL_SIZE)
+    return _whisper_model
+
 router = APIRouter(prefix="/api")
 
 CARPETA_TEMP   = Path("temp_chunks")
@@ -38,25 +53,29 @@ CARPETA_SALIDA = Path("salida")
 CARPETA_TEMP.mkdir(exist_ok=True)
 CARPETA_SALIDA.mkdir(exist_ok=True)
 
-# ── Calibración de voz por referencia ──────────────────────────────────────
+# ── Calibración de voz por referencia ─────────────────────────────────────
 CALIB_DIR = Path("data") / "voice_calibrations"
 CALIB_DIR.mkdir(parents=True, exist_ok=True)
 
 SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
 
 # Rango "natural" de ElevenLabs: fuera de él el audio suena artificial.
-# Cuando el ritmo objetivo está fuera, se usa tempo para compensar.
-SPEED_NATURAL_MIN = 0.90
-SPEED_NATURAL_MAX = 1.05
+# Cuando el ritmo objetivo está fuera, se usa tempo (ffmpeg) para compensar.
+SPEED_NATURAL_MIN = 0.82
+SPEED_NATURAL_MAX = 1.10
 
 # Sin puntuación → mide velocidad pura (sílabas)
 TEXTO_REF_VELOCIDAD = (
-    "Siente cómo tu respiración fluye naturalmente con calma y serenidad en cada momento"
+    "Siente cómo tu respiración fluye naturalmente con calma y serenidad en cada momento de tu vida,"
+    "permitiendo que la paz interior te envuelva suavemente mientras te sumerges en un estado de"
+    "relajación profunda y bienestar absoluto."
 )
 # Con puntuación → mide pausas naturales de la voz (sin SSML breaks)
 TEXTO_REF_PAUSAS = (
     "Respira, siente la calma, y relájate. Ahora... descansa completamente; "
     "sin esfuerzo: simplemente sé en paz."
+    "Ahora, mientras inhalas, imagina que estás absorbiendo serenidad, y al exhalar,"
+    "suelta cualquier tensión o preocupación que puedas tener."
 )
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -75,8 +94,8 @@ class VoiceSettings(BaseModel):
     use_speaker_boost: bool = True
 
 class Config(BaseModel):
-    api_key: str
-    voice_id: str = "0ZflTCV1dnNGRdqxOiW6"
+    api_key: str = "dd15fc77bf3a163f41e678cf29f8018fc0c43e756081a6e4dcbd6bc66ae5e251"
+    voice_id: str = "3fRg3Y6XXL8gnxYFuN1z"
     model_id: str = "eleven_multilingual_v2"
     language_code: str = "es"
     voice_settings: VoiceSettings = VoiceSettings()
@@ -845,6 +864,54 @@ def delete_history(filename: str):
 
 # ═══ Helpers de calibración de referencia ═══════════════════════════════════
 
+_VOWELS = set("aeiouáéíóúàèìòùäëïöüâêîôûyAEIOUÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛY")
+
+def _contar_silabas(texto: str) -> int:
+    """Cuenta núcleos vocálicos como proxy de sílabas.
+    Funciona para ES, EN y cualquier idioma de script latino."""
+    texto = re.sub(r'<[^>]+>', '', texto)
+    count, in_vowel = 0, False
+    for c in texto:
+        if c in _VOWELS:
+            if not in_vowel:
+                count += 1
+                in_vowel = True
+        else:
+            in_vowel = False
+    return max(count, 1)
+
+
+def _medir_tasa_whisper(audio_bytes: bytes, ext: str = ".mp3",
+                        known_text: str = None) -> float:
+    """Mide sílabas/segundo con Whisper (word timestamps).
+    - known_text: usar este texto para el conteo (referencias → texto exacto conocido).
+    - Sin known_text: usa la transcripción automática (audio del usuario → cualquier idioma).
+    Retorna 0.0 si Whisper no está disponible o falla."""
+    if not WHISPER_AVAILABLE:
+        return 0.0
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        model = _get_whisper_model()
+        result = model.transcribe(tmp_path, word_timestamps=True,
+                                  language=None, verbose=False)
+        words = [w for seg in result.get("segments", [])
+                 for w in seg.get("words", [])]
+        if not words:
+            return 0.0
+        # Duración neta de habla: suma de duraciones de palabras (excluye pausas)
+        speech_dur = sum(w["end"] - w["start"] for w in words)
+        if speech_dur < 0.5:
+            return 0.0
+        text_for_count = known_text if known_text else result.get("text", "")
+        return _contar_silabas(text_for_count) / speech_dur
+    except Exception:
+        return 0.0
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
 def _medir_silabico_seg(seg, silencios: list) -> int:
     """Intervalo silábico mediano (ms) a partir de un AudioSegment ya cargado."""
     dur_ms = len(seg)
@@ -937,37 +1004,44 @@ def _load_calib(voice_id: str, model_id: str):
     return None
 
 
-def _ref_interval_at_speed(target_speed: float, points: list) -> float:
-    """Intervalo silábico esperado (ms) a una velocidad dada.
-    Usa baseline/speed — relación hiperbólica real — con el punto speed=1.0
-    como referencia. Si no existe ese punto, interpola linealmente."""
-    baseline_pt = next((p for p in points if abs(p["speed"] - 1.0) < 0.01), None)
-    if baseline_pt:
-        return baseline_pt["med_syl_ms"] / target_speed
-    # Fallback: interpolación lineal entre los dos puntos más cercanos
+def _ref_rate_at_speed(target_speed: float, points: list) -> float:
+    """Sílabas/segundo esperadas a una velocidad dada (interpolación lineal entre puntos).
+    Si target_speed está fuera del rango, extrapola usando la relación rate ∝ speed."""
     pts = sorted(points, key=lambda p: p["speed"])
     for i in range(len(pts) - 1):
         lo, hi = pts[i], pts[i + 1]
         if lo["speed"] <= target_speed <= hi["speed"]:
             t = (target_speed - lo["speed"]) / (hi["speed"] - lo["speed"])
-            return lo["med_syl_ms"] + t * (hi["med_syl_ms"] - lo["med_syl_ms"])
-    return pts[0]["med_syl_ms"] if target_speed < pts[0]["speed"] else pts[-1]["med_syl_ms"]
+            return lo["sils_per_sec"] + t * (hi["sils_per_sec"] - lo["sils_per_sec"])
+    # Extrapolación: usar punto speed=1.0 como baseline (rate ∝ speed)
+    base = next((p for p in pts if abs(p["speed"] - 1.0) < 0.01), pts[len(pts) // 2])
+    return base["sils_per_sec"] * target_speed
 
 
-def _interpolate_speed(med_syl_ms: float, points: list) -> float:
-    """Interpola la velocidad a partir de los puntos de calibración.
-    Los puntos están ordenados: mayor med_syl_ms = menor speed."""
-    pts = sorted(points, key=lambda p: p["med_syl_ms"], reverse=True)
+def _speed_tempo_from_rate(user_rate: float, points: list) -> tuple:
+    """Dado el ritmo del usuario en síls/seg, devuelve (speed, tempo).
+    Mantiene speed en [SPEED_NATURAL_MIN, SPEED_NATURAL_MAX] y usa tempo para el resto."""
+    pts = sorted(points, key=lambda p: p["speed"])
+    ref_at_min = _ref_rate_at_speed(SPEED_NATURAL_MIN, pts)
+    ref_at_max = _ref_rate_at_speed(SPEED_NATURAL_MAX, pts)
+
+    if user_rate <= ref_at_min:
+        # Audio más lento que el límite inferior → speed=MIN, tempo < 1.0
+        return SPEED_NATURAL_MIN, round(user_rate / ref_at_min, 3)
+    if user_rate >= ref_at_max:
+        # Audio más rápido que el límite superior → speed=MAX, tempo > 1.0
+        return SPEED_NATURAL_MAX, round(user_rate / ref_at_max, 3)
+    # Dentro del rango natural: solo ajustar speed, tempo=1.0
     for i in range(len(pts) - 1):
         lo, hi = pts[i], pts[i + 1]
-        if lo["med_syl_ms"] >= med_syl_ms >= hi["med_syl_ms"]:
-            span = hi["med_syl_ms"] - lo["med_syl_ms"]
-            if span == 0:
-                return round(lo["speed"], 2)
-            t = (med_syl_ms - lo["med_syl_ms"]) / span
-            return round(lo["speed"] + t * (hi["speed"] - lo["speed"]), 2)
-    # Extrapolación fuera del rango
-    return round(pts[0]["speed"] if med_syl_ms > pts[0]["med_syl_ms"] else pts[-1]["speed"], 2)
+        lo_r, hi_r = lo["sils_per_sec"], hi["sils_per_sec"]
+        if lo_r <= user_rate <= hi_r and hi_r != lo_r:
+            t = (user_rate - lo_r) / (hi_r - lo_r)
+            speed = round(lo["speed"] + t * (hi["speed"] - lo["speed"]), 2)
+            return speed, 1.0
+    return round(SPEED_NATURAL_MIN + (user_rate - ref_at_min) /
+                 max(ref_at_max - ref_at_min, 1e-6) *
+                 (SPEED_NATURAL_MAX - SPEED_NATURAL_MIN), 2), 1.0
 
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -1061,59 +1135,51 @@ def calibrar_voz(body: CalibracionRequest):
         break_interrogacion = round(break_punto, 2)
         break_guion         = round(break_coma, 2)
 
-        # ── Velocidad + Tempo: timing silábico con calibración de referencia ──
-        # La idea: mantener el speed de ElevenLabs en el rango "natural"
-        # (SPEED_NATURAL_MIN – SPEED_NATURAL_MAX) donde la voz suena bien,
-        # y usar el tempo (ffmpeg time-stretch) para alcanzar el ritmo objetivo.
-        # No se necesitan audios de referencia extra: el tempo es lineal sobre
-        # el intervalo silábico, por lo que se calcula directamente.
+        # ── Velocidad + Tempo: medición con Whisper (speech rate en síls/seg) ──
+        # Whisper detecta las palabras con timestamps exactos → duración neta de habla
+        # sin pausas → tasa de sílabas/seg independiente del contenido y el idioma.
+        # Los puntos de calibración (generados una vez por voz) mapean speed→síls/seg,
+        # permitiendo encontrar el speed exacto de ElevenLabs.
         total_silencio_ms = sum(end - start for start, end in silencios)
-        habla_ms   = max(dur_ms - total_silencio_ms, 0)
+        habla_ms    = max(dur_ms - total_silencio_ms, 0)
         ratio_habla = habla_ms / dur_ms
 
-        med_syl_ms = _medir_silabico_seg(seg, silencios)
         calib = _load_calib(body.voice_id, body.model_id) if body.voice_id else None
+        pts   = [p for p in (calib.get("points", []) if calib else [])
+                 if "sils_per_sec" in p]
 
-        if med_syl_ms > 0:
-            pts = calib.get("points", []) if calib else []
+        # Medir tasa del audio del usuario (auto-detect idioma, sin texto conocido)
+        user_rate = _medir_tasa_whisper(audio_bytes, ext)
 
-            if len(pts) >= 5:
-                # Intervalo de referencia en el rango natural
-                ref_at_min = _ref_interval_at_speed(SPEED_NATURAL_MIN, pts)  # ms más lento permitido
-                ref_at_max = _ref_interval_at_speed(SPEED_NATURAL_MAX, pts)  # ms más rápido permitido
-
-                if med_syl_ms >= ref_at_min:
-                    # El audio es MÁS LENTO que SPEED_NATURAL_MIN a tempo=1.
-                    # Fijamos speed=SPEED_NATURAL_MIN y el tempo ralentiza el resto.
-                    speed = SPEED_NATURAL_MIN
-                    tempo = round(ref_at_min / med_syl_ms, 3)
-                elif med_syl_ms <= ref_at_max:
-                    # El audio es MÁS RÁPIDO que SPEED_NATURAL_MAX a tempo=1.
-                    # Fijamos speed=SPEED_NATURAL_MAX y el tempo acelera el resto.
-                    speed = SPEED_NATURAL_MAX
-                    tempo = round(ref_at_max / med_syl_ms, 3)
-                else:
-                    # Dentro del rango natural: solo speed, tempo=1.0
-                    speed = _interpolate_speed(med_syl_ms, pts)
-                    tempo = 1.0
+        if user_rate > 0 and len(pts) >= 5:
+            # Camino principal: tabla de calibración + Whisper → máxima precisión
+            speed, tempo = _speed_tempo_from_rate(user_rate, pts)
+        elif user_rate > 0:
+            # Sin tabla de calibración: estimación genérica
+            # A speed=1.0 la mayoría de voces ElevenLabs hablan ~4.5 síls/seg
+            GENERIC_RATE_1 = 4.5
+            effective = user_rate / GENERIC_RATE_1
+            if effective < SPEED_NATURAL_MIN:
+                speed = SPEED_NATURAL_MIN
+                tempo = round(effective / SPEED_NATURAL_MIN, 3)
+            elif effective > SPEED_NATURAL_MAX:
+                speed = SPEED_NATURAL_MAX
+                tempo = round(effective / SPEED_NATURAL_MAX, 3)
             else:
-                # Sin tabla de calibración: estimación genérica
-                effective = 185.0 / med_syl_ms
-                if effective < SPEED_NATURAL_MIN:
-                    speed = SPEED_NATURAL_MIN
-                    tempo = round(effective / SPEED_NATURAL_MIN, 3)
-                elif effective > SPEED_NATURAL_MAX:
-                    speed = SPEED_NATURAL_MAX
-                    tempo = round(effective / SPEED_NATURAL_MAX, 3)
-                else:
-                    speed = round(effective, 2)
-                    tempo = 1.0
+                speed = round(effective, 2)
+                tempo = 1.0
         else:
-            speed = 0.93
+            # Fallback: método de energía (si Whisper no está disponible)
+            med_syl_ms = _medir_silabico_seg(seg, silencios)
+            if med_syl_ms > 0:
+                speed = round(min(max(185.0 / med_syl_ms, 0.70), 1.20), 2)
+            else:
+                speed = 0.93
             tempo = 1.0
+            user_rate = 0.0
 
         speed = round(max(0.70, min(speed, 1.20)), 2)
-        tempo = round(max(0.50, min(tempo, 1.50)), 2)
+        tempo = round(max(0.50, min(tempo, 1.50)), 3)
 
         # ── Ajuste de breaks: restar las pausas naturales de la voz ──────────
         # El SSML break = pausa deseada − lo que la voz ya inserta sola.
@@ -1165,8 +1231,8 @@ def calibrar_voz(body: CalibracionRequest):
                 "duracion_s":           round(dur_ms / 1000, 1),
                 "ratio_habla":          round(ratio_habla, 3),
                 "silencios_detectados": len(duraciones),
-                "med_syl_ms":           med_syl_ms,
-                "calibrado":            bool(calib and len(calib.get("points", [])) >= 5),
+                "sils_per_sec":         round(user_rate, 2) if user_rate > 0 else None,
+                "calibrado":            bool(calib and len(pts) >= 5),
                 "pausa_media_avg_ms":   round(avg_medio),
                 "pausa_larga_avg_ms":   round(avg_largo),
             },
@@ -1212,11 +1278,13 @@ def generar_referencias(body: CalibReferenciasRequest):
             if resp.status_code != 200:
                 errors.append({"speed": speed, "error": f"HTTP {resp.status_code}"})
                 continue
-            med = _medir_silabico_bytes(resp.content, ".mp3")
-            if med > 0:
-                points.append({"speed": speed, "med_syl_ms": med})
+            # Usamos el texto exacto conocido para el conteo de sílabas (más preciso)
+            rate = _medir_tasa_whisper(resp.content, ".mp3",
+                                       known_text=TEXTO_REF_VELOCIDAD)
+            if rate > 0:
+                points.append({"speed": speed, "sils_per_sec": round(rate, 4)})
             else:
-                errors.append({"speed": speed, "error": "No se detectaron sílabas suficientes"})
+                errors.append({"speed": speed, "error": "Whisper no pudo medir la tasa"})
         except Exception as exc:
             errors.append({"speed": speed, "error": str(exc)})
 

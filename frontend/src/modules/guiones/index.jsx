@@ -6,8 +6,8 @@ import ReviewPanel from "./components/ReviewPanel"
 import HistoryPanel from "./components/HistoryPanel"
 
 const DEFAULT_CONFIG = {
-  api_key: "",
-  voice_id: "0ZflTCV1dnNGRdqxOiW6",
+  api_key: "dd15fc77bf3a163f41e678cf29f8018fc0c43e756081a6e4dcbd6bc66ae5e251",
+  voice_id: "3fRg3Y6XXL8gnxYFuN1z",
   model_id: "eleven_multilingual_v2",
   language_code: "es",
   voice_settings: {

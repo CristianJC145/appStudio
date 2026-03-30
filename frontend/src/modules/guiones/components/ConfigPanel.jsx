@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 
 function Slider({ label, value, onChange, min, max, step = 0.01, tooltip }) {
   return (
@@ -78,9 +79,9 @@ const CALIB_LABELS = {
 const SPEEDS_REFERENCIA = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20]
 
 const SECCIONES = [
-  { id: "intro",        label: "Intro",        desc: "",      icon: "▶" },
-  { id: "meditacion",   label: "Meditación",   desc: "",      icon: "◈" },
-  { id: "afirmaciones", label: "Afirmaciones", desc: "",   icon: "✦" },
+  { id: "intro",        label: "Intro",        desc: "Narración inicial, ritmo dinámico",    icon: "▶", color: "cyan"   },
+  { id: "meditacion",   label: "Meditación",   desc: "Cuerpo central, ritmo pausado",        icon: "◈", color: "purple" },
+  { id: "afirmaciones", label: "Afirmaciones", desc: "Cierre profundo, ritmo lento",         icon: "✦", color: "gold"   },
 ]
 
 function CalibracionModal({ onClose, onApply, config = {} }) {
@@ -194,163 +195,201 @@ function CalibracionModal({ onClose, onApply, config = {} }) {
   }
 
   const seccionInfo = SECCIONES.find(s => s.id === seccion)
+  const paso = estado === "seccion" ? 1 : estado === "listo" ? 3 : 2
 
-  return (
+  // Separar sugerencias en grupos para los resultados
+  const speedTempoEntries = resultado ? Object.entries(resultado.sugerencias).filter(([k]) => k.includes("speed") || k.includes("tempo")) : []
+  const breakEntries      = resultado ? Object.entries(resultado.sugerencias).filter(([k]) => k.includes("break")) : []
+
+  return createPortal(
     <div className="calib-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="calib-modal">
+
+        {/* ── Header ── */}
         <div className="calib-header">
-          <div>
-            <span className="calib-eyebrow">Asistente de calibración</span>
-            <h3 className="calib-title">
-              {seccionInfo ? `Calibrar — ${seccionInfo.label}` : "Calibrar voz desde audio"}
-            </h3>
+          <div className="calib-header-left">
+            <div className="calib-steps">
+              {[1,2,3].map(n => (
+                <span key={n} className={`calib-step ${n === paso ? "active" : n < paso ? "done" : ""}`}>{n < paso ? "✓" : n}</span>
+              ))}
+            </div>
+            <div>
+              <span className="calib-eyebrow">Asistente de calibración</span>
+              <h3 className="calib-title">
+                {seccionInfo ? `${seccionInfo.icon} ${seccionInfo.label}` : "Calibrar voz"}
+              </h3>
+            </div>
           </div>
-          <button className="calib-close" onClick={onClose}>✕</button>
+          <button className="calib-close" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
 
-        {/* ── Paso 1: elegir sección ── */}
-        {estado === "seccion" && (
-          <div className="calib-section-pick">
-            {/* Panel de referencias */}
-            {voiceOk && (
-              <div className={`calib-ref-bar ${refStatus?.calibrated ? "calib-ref-bar--ok" : "calib-ref-bar--warn"}`}>
-                {generando ? (
-                  <>
-                    <div className="calib-ref-spinner" />
-                    <span>Generando {SPEEDS_REFERENCIA.length} audios de referencia… (~30 s)</span>
-                  </>
-                ) : refStatus?.calibrated ? (
-                  <>
-                    <span className="calib-ref-icon">✓</span>
-                    <span>Referencias calibradas ({refStatus.points_count} puntos) — precisión exacta</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="calib-ref-icon">⚠</span>
-                    <span>Sin referencias — velocidad estimada (±10–15%)</span>
-                    <button className="calib-ref-btn" onClick={generarReferencias}>
-                      Generar referencias
-                    </button>
-                  </>
-                )}
-                {genError && <span className="calib-ref-error">{genError}</span>}
+        {/* ── Cuerpo scrollable ── */}
+        <div className="calib-body">
+
+          {/* ── Paso 1: elegir sección ── */}
+          {estado === "seccion" && (
+            <div className="calib-step-content">
+              {voiceOk && (
+                <div className={`calib-ref-bar ${refStatus?.calibrated ? "calib-ref-bar--ok" : "calib-ref-bar--warn"}`}>
+                  {generando ? (
+                    <><div className="calib-ref-spinner" /><span>Generando referencias… (~30 s)</span></>
+                  ) : refStatus?.calibrated ? (
+                    <>
+                      <span className="calib-ref-icon">✓</span>
+                      <span><strong>{refStatus.points_count} puntos</strong> de calibración — precisión exacta</span>
+                      <button className="calib-ref-btn" onClick={generarReferencias} style={{ marginLeft: "auto" }}>↺ Recalibrar</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="calib-ref-icon">⚠</span>
+                      <span>Sin referencias — resultado aproximado</span>
+                      <button className="calib-ref-btn" onClick={generarReferencias}>Generar</button>
+                    </>
+                  )}
+                  {genError && <span className="calib-ref-error">{genError}</span>}
+                </div>
+              )}
+
+              <p className="calib-pick-label">¿Qué sección quieres calibrar?</p>
+
+              <div className="calib-section-grid">
+                {SECCIONES.map(s => (
+                  <button key={s.id} className={`calib-section-card calib-section-card--${s.color}`} onClick={() => seleccionarSeccion(s.id)}>
+                    <span className="calib-section-icon">{s.icon}</span>
+                    <span className="calib-section-name">{s.label}</span>
+                    <span className="calib-section-desc">{s.desc}</span>
+                  </button>
+                ))}
               </div>
-            )}
-
-            <p className="calib-desc">
-              ¿Qué sección quieres calibrar? Sube un audio representativo de esa parte
-              y el sistema ajustará solo los parámetros correspondientes.
-            </p>
-            <div className="calib-section-grid">
-              {SECCIONES.map(s => (
-                <button key={s.id} className="calib-section-card" onClick={() => seleccionarSeccion(s.id)}>
-                  <span className="calib-section-icon">{s.icon}</span>
-                  <span className="calib-section-name">{s.label}</span>
-                  <span className="calib-section-desc">{s.desc}</span>
-                </button>
-              ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Paso 2: subir audio ── */}
-        {(estado === "idle" || estado === "error") && (
-          <div className="calib-upload-area">
-            <div className="calib-section-badge">
-              <span>{seccionInfo?.icon}</span> Calibrando: <strong>{seccionInfo?.label}</strong>
-              <button className="calib-change-sec" onClick={() => setEstado("seccion")}>Cambiar</button>
+          {/* ── Paso 2: subir audio ── */}
+          {(estado === "idle" || estado === "error") && (
+            <div className="calib-step-content">
+              <div className={`calib-sec-pill calib-sec-pill--${seccionInfo?.color}`}>
+                <span>{seccionInfo?.icon}</span>
+                <span>{seccionInfo?.label}</span>
+                <button onClick={() => setEstado("seccion")}>Cambiar</button>
+              </div>
+
+              <div className="calib-dropzone">
+                <div className="calib-dropzone-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                  </svg>
+                </div>
+                <p className="calib-dropzone-title">Sube un audio de <strong>{seccionInfo?.label}</strong></p>
+                <p className="calib-dropzone-sub">El sistema detectará velocidad, tempo y patrones de silencio</p>
+                <label className="calib-file-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                  </svg>
+                  Seleccionar archivo
+                  <input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" onChange={handleFile} hidden />
+                </label>
+                <p className="calib-formats">MP3 · WAV · M4A · OGG · FLAC · AAC · máx. 30 MB</p>
+                {estado === "error" && <p className="calib-error">{errorMsg}</p>}
+              </div>
             </div>
-            <p className="calib-desc">
-              Sube un audio de referencia de la sección <strong>{seccionInfo?.label}</strong>.
-              El sistema analizará silencios y velocidad para sugerir la configuración óptima.
-            </p>
-            <label className="calib-file-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Seleccionar audio
-              <input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" onChange={handleFile} hidden />
-            </label>
-            <p className="calib-formats">MP3 · WAV · M4A · OGG · FLAC · AAC · máx. 30 MB</p>
-            {estado === "error" && <p className="calib-error">{errorMsg}</p>}
-          </div>
-        )}
+          )}
 
-        {/* ── Analizando ── */}
-        {estado === "analizando" && (
-          <div className="calib-loading">
-            <div className="calib-spinner" />
-            <p>Analizando <em>{fileName}</em>…</p>
-          </div>
-        )}
+          {/* ── Analizando ── */}
+          {estado === "analizando" && (
+            <div className="calib-loading">
+              <div className="calib-loading-ring">
+                <div className="calib-spinner" />
+              </div>
+              <p className="calib-loading-title">Analizando audio…</p>
+              <p className="calib-loading-file">{fileName}</p>
+            </div>
+          )}
 
-        {/* ── Paso 3: resultados ── */}
+          {/* ── Paso 3: resultados ── */}
+          {estado === "listo" && resultado && (
+            <div className="calib-step-content">
+              <div className={`calib-sec-pill calib-sec-pill--${seccionInfo?.color}`}>
+                <span>{seccionInfo?.icon}</span>
+                <span>Resultados — {seccionInfo?.label}</span>
+                {resultado.analisis.calibrado
+                  ? <span className="calib-precision-badge calib-precision-badge--ok">Exacto</span>
+                  : <span className="calib-precision-badge calib-precision-badge--warn">~±10%</span>}
+              </div>
+
+              {/* Stats */}
+              <div className="calib-stats">
+                <div className="calib-stat">
+                  <span>{resultado.analisis.duracion_s}s</span><span>Duración</span>
+                </div>
+                <div className="calib-stat">
+                  <span>{Math.round(resultado.analisis.ratio_habla * 100)}%</span><span>Habla</span>
+                </div>
+                <div className="calib-stat">
+                  <span>{resultado.analisis.silencios_detectados}</span><span>Silencios</span>
+                </div>
+                <div className="calib-stat">
+                  <span>{resultado.analisis.sils_per_sec != null ? resultado.analisis.sils_per_sec : "—"}</span><span>Síls/seg</span>
+                </div>
+              </div>
+
+              {/* Grupo: velocidad & tempo */}
+              {speedTempoEntries.length > 0 && (
+                <div className="calib-param-group">
+                  <div className="calib-param-group-label">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    Velocidad &amp; Tempo
+                  </div>
+                  {speedTempoEntries.map(([k, v]) => (
+                    <label key={k} className={`calib-param-row ${seleccionados[k] ? "selected" : ""}`}>
+                      <span className="calib-param-label">{CALIB_LABELS[k] ?? k}</span>
+                      <span className="calib-param-val">{v}</span>
+                      <input type="checkbox" className="calib-check" checked={!!seleccionados[k]} onChange={() => toggleKey(k)} />
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Grupo: pausas SSML */}
+              {breakEntries.length > 0 && (
+                <div className="calib-param-group">
+                  <div className="calib-param-group-label">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="18"/></svg>
+                    Pausas SSML
+                  </div>
+                  {breakEntries.map(([k, v]) => (
+                    <label key={k} className={`calib-param-row ${seleccionados[k] ? "selected" : ""}`}>
+                      <span className="calib-param-label">{CALIB_LABELS[k] ?? k}</span>
+                      <span className="calib-param-val">{v}s</span>
+                      <input type="checkbox" className="calib-check" checked={!!seleccionados[k]} onChange={() => toggleKey(k)} />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Actions (solo en resultados) ── */}
         {estado === "listo" && resultado && (
-          <>
-            <div className="calib-section-badge calib-section-badge--result">
-              <span>{seccionInfo?.icon}</span> Resultados para: <strong>{seccionInfo?.label}</strong>
-            </div>
-
-            <div className="calib-stats">
-              <div className="calib-stat">
-                <span>{resultado.analisis.duracion_s}s</span>
-                <span>Duración</span>
-              </div>
-              <div className="calib-stat">
-                <span>{Math.round(resultado.analisis.ratio_habla * 100)}%</span>
-                <span>Ratio habla</span>
-              </div>
-              <div className="calib-stat">
-                <span>{resultado.analisis.silencios_detectados}</span>
-                <span>Silencios</span>
-              </div>
-              <div className="calib-stat">
-                <span>{resultado.analisis.med_syl_ms || "—"}ms</span>
-                <span>Intervalo sílaba</span>
-              </div>
-              <div className={`calib-stat calib-stat--precision ${resultado.analisis.calibrado ? "ok" : "warn"}`}>
-                <span>{resultado.analisis.calibrado ? "Exacta" : "~±10%"}</span>
-                <span>Precisión</span>
-              </div>
-            </div>
-
-            <div className="calib-params-head">
-              <span>Parámetro</span>
-              <span>Sugerencia</span>
-              <span>Aplicar</span>
-            </div>
-            <ul className="calib-params">
-              {Object.entries(resultado.sugerencias).map(([k, v]) => (
-                <li key={k} className={seleccionados[k] ? "selected" : ""}>
-                  <span className="calib-param-label">{CALIB_LABELS[k] ?? k}</span>
-                  <span className="calib-param-val">{v}</span>
-                  <input
-                    type="checkbox"
-                    className="calib-check"
-                    checked={!!seleccionados[k]}
-                    onChange={() => toggleKey(k)}
-                  />
-                </li>
-              ))}
-            </ul>
-
-            <div className="calib-actions">
-              <button className="calib-btn-secondary" onClick={() => { setEstado("idle"); setResultado(null) }}>
-                Usar otro audio
-              </button>
-              <button className="calib-btn-secondary" onClick={() => { setEstado("seccion"); setSeccion(null); setResultado(null) }}>
-                Otra sección
-              </button>
-              <button className="calib-btn-primary" onClick={aplicar}
-                disabled={!Object.values(seleccionados).some(Boolean)}>
-                Aplicar seleccionados
-              </button>
-            </div>
-          </>
+          <div className="calib-actions">
+            <button className="calib-btn-secondary" onClick={() => { setEstado("idle"); setResultado(null) }}>
+              ↩ Otro audio
+            </button>
+            <button className="calib-btn-secondary" onClick={() => { setEstado("seccion"); setSeccion(null); setResultado(null) }}>
+              ↩ Sección
+            </button>
+            <button className="calib-btn-primary" onClick={aplicar} disabled={!Object.values(seleccionados).some(Boolean)}>
+              Aplicar ✓
+            </button>
+          </div>
         )}
+
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

@@ -5,7 +5,10 @@
       "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"luxury dark premium media kit sponsor deck\" --domain landing -n 5)",
       "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"cinematic dark editorial luxury\" --domain style -n 3)",
       "Bash(find 'd:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio' -type f -name *.py -o -name *.jsx -o -name *.js)",
-      "Bash(python \"d:/DOCUMENTOS USUARIO/Desktop/appStudio/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"dark studio login auth SaaS minimal elegant apple\" --design-system -p \"Studio Login\")"
+      "Bash(python \"d:/DOCUMENTOS USUARIO/Desktop/appStudio/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"dark studio login auth SaaS minimal elegant apple\" --design-system -p \"Studio Login\")",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import routers.guiones; print\\(''OK''\\)\")",
+      "Bash(python -c \":*)"
     ]
   }
 }

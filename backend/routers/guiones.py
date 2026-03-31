@@ -393,56 +393,107 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
     return bloques
 
 
-def _construir_bloques_afirm(texto: str, cfg: Config) -> list[str]:
+def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[list[str]]]:
     """
     Para afirmaciones: fusiona líneas cortas respetando min/max chars.
     Usa _break_largo como separador para mantener los 10 s entre afirmaciones
     incluso cuando quedan en el mismo bloque.
+
+    Returns:
+        bloques_texto  : list[str]        — texto fusionado para TTS
+        lineas_x_bloque: list[list[str]]  — líneas originales de cada bloque
+                                            (para dividir el audio después)
     """
     sep = _break_largo(cfg.pausa_entre_afirmaciones)
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
 
-    fusionados: list[str] = []
-    buffer = ""
+    grupos_t: list[str]        = []   # texto TTS de cada grupo
+    grupos_l: list[list[str]]  = []   # líneas originales de cada grupo
+
+    buf_t = ""
+    buf_l: list[str] = []
+
     for linea in lineas:
-        if not buffer:
-            buffer = linea
-        elif len(buffer) < cfg.min_chars_parrafo:
-            candidato = buffer + " " + sep + " " + linea
+        if not buf_t:
+            buf_t = linea
+            buf_l = [linea]
+        elif len(buf_t) < cfg.min_chars_parrafo:
+            candidato = buf_t + " " + sep + " " + linea
             if len(candidato) <= cfg.max_chars_parrafo:
-                buffer = candidato
+                buf_t = candidato
+                buf_l.append(linea)
             else:
-                fusionados.append(buffer)
-                buffer = linea
+                grupos_t.append(buf_t);  grupos_l.append(buf_l)
+                buf_t = linea;           buf_l = [linea]
         else:
-            fusionados.append(buffer)
-            buffer = linea
-    if buffer:
-        if (fusionados
-                and len(buffer) < cfg.min_chars_parrafo
-                and len(fusionados[-1]) + len(sep) + 2 + len(buffer) <= cfg.max_chars_parrafo):
-            fusionados[-1] = fusionados[-1] + " " + sep + " " + buffer
-        else:
-            fusionados.append(buffer)
+            grupos_t.append(buf_t);  grupos_l.append(buf_l)
+            buf_t = linea;           buf_l = [linea]
 
-    bloques: list[str] = []
-    for bloque in fusionados:
-        if len(bloque) <= cfg.max_chars_parrafo:
-            bloques.append(bloque)
+    if buf_l:
+        if (grupos_t
+                and len(buf_t) < cfg.min_chars_parrafo
+                and len(grupos_t[-1]) + len(sep) + 2 + len(buf_t) <= cfg.max_chars_parrafo):
+            grupos_t[-1] = grupos_t[-1] + " " + sep + " " + buf_t
+            grupos_l[-1].extend(buf_l)
         else:
-            oraciones = re.split(r'(?<=[.!?])\s+', bloque)
-            bloque_actual = ""
-            for oracion in oraciones:
-                if len(bloque_actual) + len(oracion) + 1 <= cfg.max_chars_parrafo:
-                    bloque_actual += (" " if bloque_actual else "") + oracion
-                else:
-                    if bloque_actual:
-                        bloques.append(bloque_actual)
-                    bloque_actual = oracion
-            if bloque_actual:
-                bloques.append(bloque_actual)
+            grupos_t.append(buf_t);  grupos_l.append(buf_l)
 
-    return bloques
+    # Resolver grupos que superen max_chars: dividir línea a línea
+    bloques_t: list[str]       = []
+    bloques_l: list[list[str]] = []
+    for g_t, g_l in zip(grupos_t, grupos_l):
+        if len(g_t) <= cfg.max_chars_parrafo:
+            bloques_t.append(g_t);  bloques_l.append(g_l)
+        else:
+            for linea in g_l:
+                bloques_t.append(linea);  bloques_l.append([linea])
+
+    return bloques_t, bloques_l
+
+
+def _split_audio_at_silences(
+    audio: "AudioSegment",
+    n: int,
+    min_silence_ms: int = 1500,
+    silence_thresh_db: int = -38
+) -> list["AudioSegment"]:
+    """
+    Divide `audio` en exactamente `n` segmentos usando los (n-1) silencios
+    más largos como puntos de corte (se corta en el punto medio del silencio).
+
+    Garantías:
+    - Siempre devuelve una lista de exactamente `n` AudioSegment.
+    - Si no hay suficientes silencios detectables, hace fallback a división
+      por duración igual (mejor que nada y sin riesgo de IndexError).
+    """
+    if n == 1:
+        return [audio]
+
+    silencios = detect_silence(audio, min_silence_len=min_silence_ms,
+                               silence_thresh=silence_thresh_db)
+
+    if len(silencios) >= n - 1:
+        # Tomamos los (n-1) silencios más largos, ordenados por posición
+        top = sorted(
+            sorted(silencios, key=lambda s: s[1] - s[0], reverse=True)[: n - 1],
+            key=lambda s: s[0],
+        )
+        segmentos: list["AudioSegment"] = []
+        prev = 0
+        for s_ini, s_fin in top:
+            mid = (s_ini + s_fin) // 2
+            segmentos.append(audio[prev:mid])
+            prev = mid
+        segmentos.append(audio[prev:])
+        return segmentos
+
+    # Fallback: división equitativa por duración
+    dur = len(audio)
+    chunk = dur // n
+    return [
+        audio[i * chunk : (i + 1) * chunk if i < n - 1 else dur]
+        for i in range(n)
+    ]
 
 # =============================================================
 #  HELPERS DE REVISIÓN
@@ -564,7 +615,13 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── AFIRMACIONES ──────────────────────────────────────
         afirmaciones = []
         if tiene_afirm:
-            afirmaciones = _construir_bloques_afirm(secciones["afirmaciones"], cfg)
+            # Grupos para TTS (fusionados para cumplir min_chars) +
+            # líneas originales por grupo (para dividir el audio después)
+            afirm_grupos, afirm_lineas_x_grupo = _construir_bloques_afirm(
+                secciones["afirmaciones"], cfg
+            )
+            # Lista plana de afirmaciones individuales (una por card de revisión)
+            afirmaciones = [l for lineas in afirm_lineas_x_grupo for l in lineas]
             jobs[job_id]["afirmaciones"]    = afirmaciones
             jobs[job_id]["afirm_decisions"] = {}
 
@@ -573,21 +630,40 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
                 "message": f"Generando {len(afirmaciones)} afirmaciones..."
             })
 
-            for i, afirm in enumerate(afirmaciones):
+            flat_idx = 0
+            for i, (grupo_texto, grupo_lineas) in enumerate(
+                zip(afirm_grupos, afirm_lineas_x_grupo)
+            ):
+                n_en_grupo = len(grupo_lineas)
                 emit_event(job_id, "afirm_generating", {
-                    "index": i, "total": len(afirmaciones),
-                    "text": afirm[:80],
-                    "message": f"Afirmación {i + 1}/{len(afirmaciones)}"
+                    "index": flat_idx, "total": len(afirmaciones),
+                    "text": grupo_lineas[0][:80],
+                    "message": f"Afirmación {flat_idx + 1}/{len(afirmaciones)}"
                 })
-                audio = cargar_oracion(afirm, carpeta, "afirm", i,
-                                       cfg.afirm_voice_speed, cfg.afirm_tempo_factor, cfg)
-                if audio:
-                    audio_url = _guardar_preview(audio, job_id, "afirm", i)
-                    emit_event(job_id, "afirm_ready", {
-                        "index": i, "section": "afirm",
-                        "text": afirm, "audio_url": audio_url,
-                        "message": f"Afirmación {i + 1} lista"
-                    })
+
+                # Genera el audio del grupo completo (puede contener varias afirmaciones)
+                audio = cargar_oracion(
+                    grupo_texto, carpeta, "afirm_grp", i,
+                    cfg.afirm_voice_speed, cfg.afirm_tempo_factor, cfg
+                )
+
+                if audio and n_en_grupo > 1:
+                    # Separa el audio en segmentos individuales en los silencios SSML
+                    segmentos = _split_audio_at_silences(audio, n_en_grupo)
+                elif audio:
+                    segmentos = [audio]
+                else:
+                    segmentos = [None] * n_en_grupo
+
+                for linea, seg in zip(grupo_lineas, segmentos):
+                    if seg is not None:
+                        audio_url = _guardar_preview(seg, job_id, "afirm", flat_idx)
+                        emit_event(job_id, "afirm_ready", {
+                            "index": flat_idx, "section": "afirm",
+                            "text": linea, "audio_url": audio_url,
+                            "message": f"Afirmación {flat_idx + 1} lista"
+                        })
+                    flat_idx += 1
 
             emit_event(job_id, "afirm_review_start", {
                 "message": "Afirmaciones generadas. Esperando revisión...",
@@ -670,7 +746,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
             afirm_decisions = jobs[job_id].get("afirm_decisions", {})
             audio_afirm = AudioSegment.empty()
             last_included = -1
-            for i, afirm in enumerate(afirmaciones):
+            for i, _ in enumerate(afirmaciones):
                 if afirm_decisions.get(i) == "skip":
                     continue
                 path = CARPETA_TEMP / f"preview_{job_id}_afirm_{i}.wav"

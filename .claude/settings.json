@@ -8,7 +8,8 @@
       "Bash(python \"d:/DOCUMENTOS USUARIO/Desktop/appStudio/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"dark studio login auth SaaS minimal elegant apple\" --design-system -p \"Studio Login\")",
       "Bash(pip install:*)",
       "Bash(python -c \"import routers.guiones; print\\(''OK''\\)\")",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Read(//d//**)"
     ]
   }
 }

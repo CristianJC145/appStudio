@@ -1350,7 +1350,28 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 /* Audio player */
 .audio-player { display: flex; flex-direction: column; gap: 5px; }
-.ap-seek { width: 100%; height: 4px; accent-color: var(--gold3); cursor: pointer; margin: 2px 0; }
+/* Barra de seek custom — sin input[type=range] para evitar conflictos browser/React */
+.ap-seek-bar {
+  position: relative; width: 100%; height: 20px;
+  display: flex; align-items: center;
+  cursor: pointer; touch-action: none; user-select: none;
+}
+.ap-seek-track {
+  position: absolute; left: 0; right: 0; height: 4px;
+  background: var(--bd-dim); border-radius: 2px;
+}
+.ap-seek-fill {
+  height: 100%; background: var(--gold3); border-radius: 2px; pointer-events: none;
+}
+.ap-seek-thumb {
+  position: absolute; width: 11px; height: 11px;
+  background: var(--gold3); border-radius: 50%;
+  transform: translateX(-50%); pointer-events: none;
+  top: 50%; margin-top: -5.5px;
+  box-shadow: 0 0 0 2px rgba(212,168,67,0.25);
+  transition: transform 0.1s;
+}
+.ap-seek-bar:active .ap-seek-thumb { transform: translateX(-50%) scale(1.25); }
 .ap-controls { display: flex; align-items: center; gap: 4px; }
 .ap-btn {
   background: rgba(0,0,0,0.55); border: 1px solid var(--bd-dim); color: var(--tx2);

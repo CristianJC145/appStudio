@@ -4,26 +4,43 @@ import { useState, useEffect, useRef } from "react"
 //  Player de audio con controles de salto
 // ─────────────────────────────────────────────────────────────
 function AudioPlayer({ src }) {
-  const audioRef   = useRef(null)
-  const sliderRef  = useRef(null)  // ref directo al <input> — no controlado por React
-  const seekingRef = useRef(false)
+  const audioRef    = useRef(null)
+  const barRef      = useRef(null)   // contenedor clickeable de la barra
+  const fillRef     = useRef(null)   // div del progreso (visual)
+  const thumbRef    = useRef(null)   // circulo thumb
+  const seekingRef  = useRef(false)
+  const durationRef = useRef(0)      // duración sin causar re-renders
 
-  const [playing,  setPlaying]  = useState(false)
-  const [current,  setCurrent]  = useState(0)    // solo para mostrar el tiempo en pantalla
-  const [duration, setDuration] = useState(0)
-  const [speed,    setSpeed]    = useState(1)
+  const [playing, setPlaying] = useState(false)
+  const [current, setCurrent] = useState(0)
+  const [durDisp, setDurDisp] = useState(0)  // solo para mostrar en pantalla
+  const [speed,   setSpeed]   = useState(1)
   const SPEEDS = [1, 1.5, 2]
 
+  // Actualiza la barra visualmente dado un porcentaje 0-1
+  const _setPct = (pct) => {
+    const p = Math.max(0, Math.min(1, pct)) * 100
+    if (fillRef.current)  fillRef.current.style.width  = `${p}%`
+    if (thumbRef.current) thumbRef.current.style.left  = `${p}%`
+  }
+
+  // Calcula el porcentaje relativo al ancho de la barra desde un PointerEvent
+  const _pctFromEvent = (e) => {
+    const bar = barRef.current
+    if (!bar) return 0
+    const rect = bar.getBoundingClientRect()
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  }
+
+  // Reset al cambiar src
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
-    a.pause()
-    setPlaying(false)
-    setCurrent(0)
-    setDuration(0)
-    setSpeed(1)
-    a.playbackRate = 1
-    if (sliderRef.current) sliderRef.current.value = 0
+    a.pause(); setPlaying(false); setCurrent(0); setDurDisp(0)
+    durationRef.current = 0
+    setSpeed(1); a.playbackRate = 1
+    seekingRef.current = false
+    _setPct(0)
     a.load()
   }, [src])
 
@@ -33,45 +50,58 @@ function AudioPlayer({ src }) {
   }
 
   const toggle = () => {
-    const a = audioRef.current
-    if (!a) return
+    const a = audioRef.current; if (!a) return
     playing ? a.pause() : a.play()
     setPlaying(p => !p)
   }
 
   const skip = (secs) => {
-    const a = audioRef.current
-    if (!a) return
-    const dur = a.duration
-    if (!dur || isNaN(dur)) return
+    const a = audioRef.current; if (!a) return
+    const dur = durationRef.current; if (!dur || isNaN(dur)) return
     const next = Math.max(0, Math.min(dur, a.currentTime + secs))
     a.currentTime = next
     setCurrent(next)
-    if (sliderRef.current) sliderRef.current.value = next
+    _setPct(next / dur)
   }
-
-  // El slider es no-controlado: React nunca sobreescribe su valor durante renders.
-  // onChange solo actualiza el audio y el display de tiempo.
-  const onSeekChange = (e) => {
-    seekingRef.current = true
-    const val = parseFloat(e.target.value)
-    if (audioRef.current) audioRef.current.currentTime = val
-    setCurrent(val)
-  }
-
-  const onSeekEnd = () => { seekingRef.current = false }
 
   const handleTimeUpdate = (e) => {
     if (seekingRef.current) return
     const t = e.target.currentTime
     setCurrent(t)
-    if (sliderRef.current) sliderRef.current.value = t
+    _setPct(durationRef.current > 0 ? t / durationRef.current : 0)
   }
 
   const handleMetadata = (e) => {
     const dur = e.target.duration
-    setDuration(dur)
-    if (sliderRef.current) sliderRef.current.max = dur
+    durationRef.current = dur
+    setDurDisp(dur)
+  }
+
+  // ── Pointer events en la barra (funcionan igual en mouse y touch) ──
+
+  const onBarPointerDown = (e) => {
+    e.preventDefault()
+    seekingRef.current = true
+    barRef.current.setPointerCapture(e.pointerId)  // captura el pointer aunque salga del elemento
+    _setPct(_pctFromEvent(e))
+  }
+
+  const onBarPointerMove = (e) => {
+    if (!seekingRef.current) return
+    _setPct(_pctFromEvent(e))
+  }
+
+  const onBarPointerUp = (e) => {
+    if (!seekingRef.current) return
+    seekingRef.current = false
+    const pct = _pctFromEvent(e)
+    const dur = durationRef.current
+    _setPct(pct)
+    if (dur && audioRef.current) {
+      const t = pct * dur
+      audioRef.current.currentTime = t
+      setCurrent(t)
+    }
   }
 
   const cycleSpeed = () => {
@@ -91,30 +121,30 @@ function AudioPlayer({ src }) {
         onEnded={() => { setPlaying(false); seekingRef.current = false }}
       />
 
-      {/* defaultValue en vez de value → el browser controla el slider, React no interfiere */}
-      <input
-        ref={sliderRef}
-        className="ap-seek"
-        type="range"
-        min={0}
-        max={duration || 0}
-        step={0.1}
-        defaultValue={0}
-        onChange={onSeekChange}
-        onMouseUp={onSeekEnd}
-        onTouchEnd={onSeekEnd}
-      />
+      {/* Barra de seek completamente custom — sin input[type=range] */}
+      <div
+        ref={barRef}
+        className="ap-seek-bar"
+        onPointerDown={onBarPointerDown}
+        onPointerMove={onBarPointerMove}
+        onPointerUp={onBarPointerUp}
+      >
+        <div className="ap-seek-track">
+          <div ref={fillRef} className="ap-seek-fill" style={{ width: "0%" }} />
+        </div>
+        <div ref={thumbRef} className="ap-seek-thumb" style={{ left: "0%" }} />
+      </div>
 
       <div className="ap-controls">
-        <button className="ap-btn" onClick={() => skip(-10)}>«10</button>
-        <button className="ap-btn" onClick={() => skip(-5)}>«5</button>
-        <button className="ap-btn ap-play" onClick={toggle}>
+        <button type="button" className="ap-btn" onClick={() => skip(-10)}>«10</button>
+        <button type="button" className="ap-btn" onClick={() => skip(-5)}>«5</button>
+        <button type="button" className="ap-btn ap-play" onClick={toggle}>
           {playing ? "▐▐" : "▶"}
         </button>
-        <button className="ap-btn" onClick={() => skip(5)}>5»</button>
-        <button className="ap-btn" onClick={() => skip(10)}>10»</button>
-        <button className="ap-btn ap-speed" onClick={cycleSpeed}>x{speed}</button>
-        <span className="ap-time">{fmt(current)} / {fmt(duration)}</span>
+        <button type="button" className="ap-btn" onClick={() => skip(5)}>5»</button>
+        <button type="button" className="ap-btn" onClick={() => skip(10)}>10»</button>
+        <button type="button" className="ap-btn ap-speed" onClick={cycleSpeed}>x{speed}</button>
+        <span className="ap-time">{fmt(current)} / {fmt(durDisp)}</span>
       </div>
     </div>
   )

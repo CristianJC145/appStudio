@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 try:
     from pydub import AudioSegment
-    from pydub.silence import detect_silence
+    from pydub.silence import detect_silence, detect_leading_silence
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
@@ -111,7 +111,7 @@ class Config(BaseModel):
     medit_voice_speed: float = 0.90
     medit_tempo_factor: float = 0.91
     pausa_entre_oraciones: int = 400
-    pausa_entre_afirmaciones: int = 10000
+    pausa_entre_afirmaciones: int = 5000
     pausa_intro_a_afirm: int = 2000
     pausa_afirm_a_medit: int = 3000
     pausa_entre_meditaciones: int = 5000
@@ -404,7 +404,7 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[l
         lineas_x_bloque: list[list[str]]  — líneas originales de cada bloque
                                             (para dividir el audio después)
     """
-    sep = _break_largo(cfg.pausa_entre_afirmaciones)
+    sep = _break_largo(_SSML_SPLIT_PAUSE_MS)
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
 
     grupos_t: list[str]        = []   # texto TTS de cada grupo
@@ -449,6 +449,30 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[l
                 bloques_t.append(linea);  bloques_l.append([linea])
 
     return bloques_t, bloques_l
+
+
+# Pausa SSML interna entre afirmaciones agrupadas (solo para detectar el punto de corte).
+# No es la pausa final del audio: esa se añade en el ensamblado y la controla el usuario.
+# 3 s es más que suficiente para la detección; reduce el tiempo de TTS respecto a 10 s.
+_SSML_SPLIT_PAUSE_MS = 3000
+
+
+def _trim_silence(
+    seg: "AudioSegment",
+    thresh_db: int = -38,
+    chunk_ms: int = 10,
+    keep_ms: int = 80,
+) -> "AudioSegment":
+    """
+    Elimina el silencio al inicio y al final del segmento.
+    Conserva `keep_ms` ms de silencio en cada extremo para que la reproducción
+    no empiece/termine de golpe.
+    """
+    dur = len(seg)
+    start = max(0, detect_leading_silence(seg,         silence_threshold=thresh_db, chunk_size=chunk_ms) - keep_ms)
+    end   = max(0, detect_leading_silence(seg.reverse(), silence_threshold=thresh_db, chunk_size=chunk_ms) - keep_ms)
+    trimmed = seg[start: dur - end]
+    return trimmed if len(trimmed) > 200 else seg   # fallback si quedó vacío
 
 
 def _split_audio_at_silences(
@@ -649,9 +673,10 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
 
                 if audio and n_en_grupo > 1:
                     # Separa el audio en segmentos individuales en los silencios SSML
-                    segmentos = _split_audio_at_silences(audio, n_en_grupo)
+                    # y recorta el silencio sobrante de cada extremo
+                    segmentos = [_trim_silence(s) for s in _split_audio_at_silences(audio, n_en_grupo)]
                 elif audio:
-                    segmentos = [audio]
+                    segmentos = [_trim_silence(audio)]
                 else:
                     segmentos = [None] * n_en_grupo
 

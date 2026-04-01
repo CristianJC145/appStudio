@@ -80,6 +80,7 @@ export default function ImageStep({
 }) {
   const [generating, setGenerating] = useState(false)
   const [genStatus,  setGenStatus]  = useState("")
+  const [genError,   setGenError]   = useState("")
   const [enhancing,  setEnhancing]  = useState(null)   // image_id que se está mejorando
   const [savedIds,   setSavedIds]   = useState(new Set())
   const esRef = useRef(null)
@@ -90,6 +91,7 @@ export default function ImageStep({
     if (generating) return
     setGenerating(true)
     setGenStatus("Iniciando...")
+    setGenError("")
     onImagesUpdate([])
     onSelectImage(null)
 
@@ -138,7 +140,7 @@ export default function ImageStep({
                 enhanced: false,
               }])
             } else if (ev.event === "image_error") {
-              setGenStatus(ev.message)
+              setGenError(prev => prev ? `${prev}\n${ev.message}` : ev.message)
             } else if (ev.event === "done") {
               setGenStatus("Generación completada")
               setGenerating(false)
@@ -148,7 +150,7 @@ export default function ImageStep({
       }
       setGenerating(false)
     }).catch(err => {
-      setGenStatus("Error de conexión")
+      setGenError(`Error de conexión: ${err.message || err}`)
       setGenerating(false)
     })
   }
@@ -227,6 +229,14 @@ export default function ImageStep({
         <div className="bucles-gen-status">
           {generating && <span className="pulse" style={{ color: "var(--gold3)", marginRight: 8 }}>◉</span>}
           {genStatus}
+        </div>
+      )}
+      {genError && (
+        <div className="bucles-gen-error-box">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <pre style={{ margin: 0, fontFamily: "var(--ff-mono)", fontSize: "0.68rem", whiteSpace: "pre-wrap" }}>{genError}</pre>
         </div>
       )}
 

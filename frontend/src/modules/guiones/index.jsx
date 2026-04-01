@@ -84,7 +84,7 @@ export default function GuionesModule() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [guion, setGuion]   = useState("")
-  const [nombre, setNombre] = useState("meditacion")
+  const [nombre, setNombre] = useState("")
   const [jobId, setJobId]   = useState(null)
   const [jobStatus, setJobStatus] = useState(null)
   const [events, setEvents] = useState([])

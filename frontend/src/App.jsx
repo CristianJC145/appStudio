@@ -10,6 +10,7 @@ import LandingContenido from "./pages/landing/Contenido"
 import LandingComunidad from "./pages/landing/Comunidad"
 import ModuleHub from "./components/ModuleHub"
 import GuionesModule from "./modules/guiones"
+import BuclesModule  from "./modules/bucles"
 import AdminPanel from "./pages/AdminPanel"
 import modules from "./modules/registry"
 import logoImg from "./assets/logo.png"
@@ -306,6 +307,7 @@ function Shell() {
         <Routes>
           <Route index                  element={<ModuleHub moduleStates={moduleStates} />} />
           <Route path="guiones/*"       element={<ModuleGate id="guiones" name="Automatización de Audios" states={moduleStates}><GuionesModule /></ModuleGate>} />
+          <Route path="bucles/*"        element={<ModuleGate id="bucles"  name="Bucles de Video"          states={moduleStates}><BuclesModule  /></ModuleGate>} />
           <Route path="admin"           element={isAdmin ? <AdminPanel /> : <Navigate to="/studio" replace />} />
         </Routes>
       </main>

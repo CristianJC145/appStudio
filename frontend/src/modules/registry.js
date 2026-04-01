@@ -23,7 +23,7 @@ const modules = [
     description: "Crea bucles de música ambiente y sonidos de naturaleza para meditaciones.",
     icon: "⟳",
     path: "/studio/bucles",
-    status: "coming-soon",
+    status: "active",
     accent: "#2dbe60",
   },
   {

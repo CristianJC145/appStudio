@@ -74,115 +74,141 @@ def _image_to_b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode()
 
 
-def _build_dalle_prompt(script: str, style_desc: str, style_hint: str, openai_key: str) -> str:
+def _build_content_prompt(script: str, style_hint: str, openai_key: str) -> str:
     """
-    Usa GPT-4o-mini para construir un prompt DALL-E 3 optimizado
-    basado en el guion, la descripción de estilo de la biblioteca y el hint del usuario.
+    Usa GPT-4o para construir un prompt de contenido (qué mostrar) a partir del guion.
+    NO describe el estilo — ese lo aportarán las imágenes de referencia directamente.
     """
-    system = (
-        "Eres un experto en prompts para DALL-E 3. "
-        "Recibirás el guion de una meditación o contenido de bienestar y, opcionalmente, "
-        "una descripción del estilo visual que se usa en la biblioteca de imágenes del proyecto. "
-        "Genera un único prompt en inglés, detallado y evocador, que capture la esencia del guion "
-        "pero adaptado al formato visual requerido: imágenes de fondo para bucles de video de meditación. "
-        "Las imágenes deben ser: cinematográficas, serenas, con profundidad de campo, paleta de colores cálida "
-        "o etérea, sin texto, sin personas si no es necesario, inspiradoras y tranquilizadoras. "
-        "El prompt no debe superar 900 caracteres. Responde SOLO con el prompt, sin explicaciones."
-    )
-    user_parts = [f"GUION:\n{script[:1500]}"]
-    if style_desc:
-        user_parts.append(f"ESTILO DE BIBLIOTECA:\n{style_desc}")
-    if style_hint:
-        user_parts.append(f"INSTRUCCIÓN ADICIONAL: {style_hint}")
-
     try:
         r = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4o-mini",
+                "model": "gpt-4o",
                 "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user",   "content": "\n\n".join(user_parts)},
+                    {"role": "system", "content": (
+                        "You are an expert at creating image generation prompts for meditation/wellness video backgrounds. "
+                        "Extract the THEME and VISUAL CONTENT from the script: what landscape, elements, atmosphere, "
+                        "and mood should be depicted. Do NOT describe style, colors, or technique — only what to show. "
+                        "Write in English. Maximum 200 characters. Reply with ONLY the content description."
+                    )},
+                    {"role": "user", "content": (
+                        f"Script:\n{script[:1200]}"
+                        + (f"\n\nAdditional instruction: {style_hint}" if style_hint else "")
+                    )},
                 ],
-                "max_tokens": 400,
-                "temperature": 0.8,
+                "max_tokens": 120,
+                "temperature": 0.7,
             },
-            timeout=30,
+            timeout=20,
         )
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"].strip()
     except Exception:
         pass
+    # Fallback
+    words = re.findall(r'\b\w{5,}\b', script[:400])
+    return ", ".join(list(dict.fromkeys(words))[:6]) + ", serene landscape, meditation background"
 
-    # Fallback: prompt genérico basado en palabras clave del guion
-    words = re.findall(r'\b\w{5,}\b', script[:500])
-    keywords = ", ".join(list(dict.fromkeys(words))[:8])
-    return (
-        f"Cinematic meditation background, serene landscape inspired by {keywords}, "
-        "golden hour light, soft bokeh, ethereal atmosphere, no text, photorealistic, 4K"
+
+def _get_library_image_paths(library_ids: list[str]) -> list[Path]:
+    """Devuelve paths válidos de imágenes de biblioteca (prioriza las seleccionadas, luego rellena con el resto)."""
+    paths = []
+    # Primero los seleccionados explícitamente
+    for lid in library_ids:
+        p = LIBRARY_DIR / f"{lid}.png"
+        if p.exists():
+            paths.append(p)
+    # Completar hasta 4 con otras de la biblioteca si hacen falta
+    if len(paths) < 4:
+        for p in sorted(LIBRARY_DIR.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True):
+            img_id = p.stem
+            if img_id not in library_ids and p not in paths:
+                paths.append(p)
+            if len(paths) >= 4:
+                break
+    return paths[:4]
+
+
+def _generate_with_visual_references(
+    content_prompt: str,
+    ref_paths: list[Path],
+    variation_idx: int,
+    openai_key: str,
+) -> Optional[bytes]:
+    """
+    Genera una imagen usando la Responses API de OpenAI con gpt-image-1.
+    Pasa las imágenes de referencia DIRECTAMENTE como contexto visual —
+    el modelo ve el estilo real, no una descripción textual.
+    """
+    variation_hints = [
+        "",
+        "Slightly different composition and framing.",
+        "Different time of day or lighting variation.",
+        "Alternative angle or perspective.",
+        "More abstract or textural interpretation.",
+    ]
+    variation_note = variation_hints[min(variation_idx, len(variation_hints) - 1)]
+
+    # Construir el mensaje con referencias visuales
+    content = []
+    for rp in ref_paths:
+        b64 = _image_to_b64(rp)
+        content.append({
+            "type":      "input_image",
+            "image_url": f"data:image/png;base64,{b64}",
+        })
+
+    full_instruction = (
+        f"Using the reference images above as strict style guides — matching their exact visual aesthetic, "
+        f"color palette, lighting quality, mood, composition style, and overall atmosphere — "
+        f"generate a NEW original image (NOT a copy) showing: {content_prompt}. "
+        f"The image must be landscape format (16:9), suitable as a meditation video background, "
+        f"no text, no watermarks, photorealistic or matching the reference rendering style. "
+        + (f"{variation_note} " if variation_note else "")
+        + "Output only the image."
     )
-
-
-def _describe_library_style(library_ids: list[str], openai_key: str) -> str:
-    """
-    Envía miniaturas de la biblioteca a GPT-4o-mini para extraer
-    una descripción de estilo visual consistente.
-    """
-    if not library_ids or not openai_key:
-        return ""
-
-    images_content = []
-    for lid in library_ids[:4]:   # máx 4 para no exceder tokens
-        meta_path = LIBRARY_DIR / f"{lid}.json"
-        img_path  = LIBRARY_DIR / f"{lid}.png"
-        if img_path.exists() and meta_path.exists():
-            b64 = _image_to_b64(img_path)
-            images_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "low"},
-            })
-
-    if not images_content:
-        return ""
+    content.append({"type": "text", "text": full_instruction})
 
     try:
-        messages = [
-            {"role": "system", "content": (
-                "Analiza las imágenes de referencia y describe en 2-3 frases el estilo visual: "
-                "paleta de colores, iluminación, atmósfera, tipo de composición. "
-                "Responde en inglés, de forma concisa y técnica para usarse en un prompt de DALL-E."
-            )},
-            {"role": "user", "content": [
-                {"type": "text", "text": "Describe el estilo visual de estas imágenes de referencia:"},
-                *images_content,
-            ]},
-        ]
         r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.openai.com/v1/responses",
             headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-            json={"model": "gpt-4o-mini", "messages": messages, "max_tokens": 200},
-            timeout=30,
+            json={
+                "model": "gpt-4o",
+                "input": [{"role": "user", "content": content}],
+                "tools": [{"type": "image_generation", "quality": "high", "size": "1792x1024"}],
+            },
+            timeout=120,
         )
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"].strip()
+            for output_item in r.json().get("output", []):
+                if output_item.get("type") == "image_generation_call":
+                    b64 = output_item.get("result", "")
+                    if b64:
+                        return base64.b64decode(b64)
     except Exception:
         pass
-    return ""
+    return None
 
 
-def _generate_dalle_image(prompt: str, openai_key: str, quality: str = "hd") -> Optional[bytes]:
-    """Genera una imagen con DALL-E 3 y devuelve los bytes PNG."""
+def _generate_dalle_fallback(content_prompt: str, openai_key: str) -> Optional[bytes]:
+    """Fallback con DALL-E 3 cuando no hay imágenes de referencia."""
+    full_prompt = (
+        f"Cinematic meditation background, {content_prompt}. "
+        "Photorealistic, golden hour light, soft depth of field, atmospheric, "
+        "no text, no people, landscape 16:9, 4K quality."
+    )
     try:
         r = requests.post(
             "https://api.openai.com/v1/images/generations",
             headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
             json={
-                "model":   "dall-e-3",
-                "prompt":  prompt,
-                "n":       1,
-                "size":    "1792x1024",   # landscape — ideal para fondos de video
-                "quality": quality,       # "hd" o "standard"
+                "model":           "dall-e-3",
+                "prompt":          full_prompt,
+                "n":               1,
+                "size":            "1792x1024",
+                "quality":         "hd",
                 "response_format": "b64_json",
             },
             timeout=90,
@@ -197,31 +223,38 @@ def _generate_dalle_image(prompt: str, openai_key: str, quality: str = "hd") -> 
 
 def _enhance_with_gpt_image(image_path: Path, openai_key: str) -> Optional[bytes]:
     """
-    Usa gpt-image-1 para mejorar la calidad de la imagen existente.
-    Envía la imagen y pide una versión de mayor resolución y detalle.
+    Mejora la imagen usando la Responses API (gpt-4o + image_generation tool).
+    Ve la imagen original y genera una versión mejorada con mejor calidad cinematográfica.
     """
+    b64 = _image_to_b64(image_path)
     try:
-        b64 = _image_to_b64(image_path)
         r = requests.post(
-            "https://api.openai.com/v1/images/edits",
-            headers={"Authorization": f"Bearer {openai_key}"},
-            files={"image": ("image.png", image_path.read_bytes(), "image/png")},
-            data={
-                "model":  "gpt-image-1",
-                "prompt": (
-                    "Enhance this image: increase sharpness, improve color grading with cinematic tones, "
-                    "add subtle depth-of-field effect, make it look more professional and atmospheric. "
-                    "Keep the same composition and subject. No text."
-                ),
-                "n":    1,
-                "size": "1536x1024",
-                "response_format": "b64_json",
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+            json={
+                "model": "gpt-4o",
+                "input": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"},
+                        {"type": "text", "text": (
+                            "Enhance this image with better cinematic quality: richer color grading, "
+                            "improved atmospheric depth, more professional lighting, subtle depth-of-field. "
+                            "Keep the exact same composition, subject, and style — only improve quality and aesthetics. "
+                            "No text, no watermarks."
+                        )},
+                    ],
+                }],
+                "tools": [{"type": "image_generation", "quality": "high", "size": "1792x1024"}],
             },
             timeout=120,
         )
         if r.status_code == 200:
-            b64_out = r.json()["data"][0]["b64_json"]
-            return base64.b64decode(b64_out)
+            for item in r.json().get("output", []):
+                if item.get("type") == "image_generation_call":
+                    b64_out = item.get("result", "")
+                    if b64_out:
+                        return base64.b64decode(b64_out)
     except Exception:
         pass
     return None
@@ -436,38 +469,48 @@ def _run_loop_job(job_id: str, image_path: Path, req: GenerateLoopRequest):
 @router.post("/generate-images")
 def generate_images(req: GenerateImagesRequest):
     """
-    Genera N imágenes con DALL-E 3 usando el guion y el contexto de la biblioteca.
-    Devuelve SSE con un evento por imagen.
+    Genera N imágenes usando la Responses API de OpenAI con referencias visuales directas.
+    Cuando hay imágenes en la biblioteca, gpt-image-1 ve el estilo real — no una descripción textual.
+    Sin referencias usa DALL-E 3 como fallback.
     """
     n = max(1, min(5, req.n_images))
 
     def stream():
-        # Paso 1: extraer estilo de la biblioteca
-        yield f"data: {json.dumps({'event': 'status', 'message': 'Analizando biblioteca de estilos...'})}\n\n"
-        style_desc = _describe_library_style(req.library_ids, req.openai_key)
+        # Paso 1: extraer rutas de referencias visuales
+        yield f"data: {json.dumps({'event': 'status', 'message': 'Preparando referencias visuales...'})}\n\n"
+        ref_paths = _get_library_image_paths(req.library_ids)
+        use_references = len(ref_paths) > 0
 
-        # Paso 2: construir prompt
-        yield f"data: {json.dumps({'event': 'status', 'message': 'Construyendo prompt creativo...'})}\n\n"
-        base_prompt = _build_dalle_prompt(req.script, style_desc, req.style_hint, req.openai_key)
+        # Paso 2: construir descripción de contenido (qué mostrar, no cómo)
+        yield f"data: {json.dumps({'event': 'status', 'message': 'Analizando guion...'})}\n\n"
+        content_prompt = _build_content_prompt(req.script, req.style_hint, req.openai_key)
+
+        method = "referencias visuales directas" if use_references else "DALL-E 3 (sin referencias)"
+        yield f"data: {json.dumps({'event': 'status', 'message': f'Generando con {method}...'})}\n\n"
 
         # Paso 3: generar N imágenes
         for idx in range(n):
             yield f"data: {json.dumps({'event': 'generating', 'index': idx, 'total': n, 'message': f'Generando imagen {idx + 1} de {n}...'})}\n\n"
 
-            # Variamos ligeramente el prompt para obtener variedad
-            variation = "" if idx == 0 else f" (variation {idx + 1}, slightly different mood and composition)"
-            prompt = base_prompt + variation
+            if use_references:
+                img_bytes = _generate_with_visual_references(
+                    content_prompt, ref_paths, idx, req.openai_key
+                )
+            else:
+                img_bytes = _generate_dalle_fallback(content_prompt, req.openai_key)
 
-            img_bytes = _generate_dalle_image(prompt, req.openai_key)
             if img_bytes:
-                image_id  = uuid.uuid4().hex[:16]
-                img_path  = GEN_DIR / f"{image_id}.png"
+                image_id = uuid.uuid4().hex[:16]
+                img_path = GEN_DIR / f"{image_id}.png"
                 img_path.write_bytes(img_bytes)
-                # Guardar metadata
-                meta = {"id": image_id, "prompt": prompt, "created_at": int(time.time()), "enhanced": False}
+                meta = {
+                    "id": image_id, "prompt": content_prompt,
+                    "created_at": int(time.time()), "enhanced": False,
+                    "method": "visual_references" if use_references else "dalle3",
+                    "n_refs": len(ref_paths),
+                }
                 (GEN_DIR / f"{image_id}.json").write_text(json.dumps(meta))
-
-                yield f"data: {json.dumps({'event': 'image_ready', 'index': idx, 'image_id': image_id, 'url': f'/api/bucles/image/{image_id}', 'prompt': prompt[:120] + '...'})}\n\n"
+                yield f"data: {json.dumps({'event': 'image_ready', 'index': idx, 'image_id': image_id, 'url': f'/api/bucles/image/{image_id}', 'prompt': content_prompt[:120]})}\n\n"
             else:
                 yield f"data: {json.dumps({'event': 'image_error', 'index': idx, 'message': f'Error generando imagen {idx + 1}'})}\n\n"
 

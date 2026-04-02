@@ -9,8 +9,9 @@ import LandingCanal     from "./pages/landing/Canal"
 import LandingContenido from "./pages/landing/Contenido"
 import LandingComunidad from "./pages/landing/Comunidad"
 import ModuleHub from "./components/ModuleHub"
-import GuionesModule from "./modules/guiones"
-import BuclesModule  from "./modules/bucles"
+import GuionesModule    from "./modules/guiones"
+import BuclesModule     from "./modules/bucles"
+import GeneradorModule  from "./modules/generador"
 import AdminPanel from "./pages/AdminPanel"
 import modules from "./modules/registry"
 import logoImg from "./assets/logo.png"
@@ -74,11 +75,18 @@ const IconShield = () => (
   </svg>
 )
 
+const IconPen = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+  </svg>
+)
+
 const MODULE_ICONS = {
   guiones:    IconWave,
   miniaturas: IconMonitor,
   bucles:     IconLoop,
   imagenes:   IconImage,
+  generador:  IconPen,
 }
 
 /* ── Module disabled screen ──────────────────────────────────── */
@@ -306,8 +314,9 @@ function Shell() {
       <main className="dash-content">
         <Routes>
           <Route index                  element={<ModuleHub moduleStates={moduleStates} />} />
-          <Route path="guiones/*"       element={<ModuleGate id="guiones" name="Automatización de Audios" states={moduleStates}><GuionesModule /></ModuleGate>} />
-          <Route path="bucles/*"        element={<ModuleGate id="bucles"  name="Bucles de Video"          states={moduleStates}><BuclesModule  /></ModuleGate>} />
+          <Route path="guiones/*"       element={<ModuleGate id="guiones"   name="Automatización de Audios"    states={moduleStates}><GuionesModule   /></ModuleGate>} />
+          <Route path="bucles/*"        element={<ModuleGate id="bucles"    name="Bucles de Video"             states={moduleStates}><BuclesModule    /></ModuleGate>} />
+          <Route path="generador/*"     element={<ModuleGate id="generador" name="Generador de Guiones IA"     states={moduleStates}><GeneradorModule /></ModuleGate>} />
           <Route path="admin"           element={isAdmin ? <AdminPanel /> : <Navigate to="/studio" replace />} />
         </Routes>
       </main>

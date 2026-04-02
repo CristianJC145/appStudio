@@ -11,6 +11,9 @@
       "Bash(python -c \":*)",
       "Read(//d//**)",
       "Bash(ls \"d:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio\\\\frontend\\\\src\\\\modules\\\\guiones\\\\components\"\" && cat \"d:DOCUMENTOS USUARIODesktopappStudiofrontendsrcApp.css \")"
+    ],
+    "additionalDirectories": [
+      "d:\\DOCUMENTOS USUARIO\\Desktop\\appStudio\\frontend\\src\\modules\\generador"
     ]
   }
 }

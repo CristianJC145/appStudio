@@ -35,6 +35,15 @@ const modules = [
     status: "coming-soon",
     accent: "#9370db",
   },
+  {
+    id: "generador",
+    name: "Generador de Guiones IA",
+    description: "Genera guiones basados en tendencias de YouTube con la voz y fórmula única de tu canal.",
+    icon: "✍",
+    path: "/studio/generador",
+    status: "active",
+    accent: "#d44e9a",
+  },
 ]
 
 export default modules

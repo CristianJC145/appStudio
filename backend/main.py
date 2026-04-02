@@ -10,6 +10,7 @@ from routers import guiones
 from routers import auth
 from routers import admin
 from routers import bucles
+from routers import generador
 try:
     from routers.guiones import PYDUB_AVAILABLE
 except ImportError:
@@ -37,6 +38,7 @@ app.include_router(guiones.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(bucles.router)
+app.include_router(generador.router)
 
 # ── Health global ─────────────────────────────────────────────
 @app.get("/api/health")

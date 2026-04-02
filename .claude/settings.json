@@ -10,7 +10,9 @@
       "Bash(python -c \"import routers.guiones; print\\(''OK''\\)\")",
       "Bash(python -c \":*)",
       "Read(//d//**)",
-      "Bash(ls \"d:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio\\\\frontend\\\\src\\\\modules\\\\guiones\\\\components\"\" && cat \"d:DOCUMENTOS USUARIODesktopappStudiofrontendsrcApp.css \")"
+      "Bash(ls \"d:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio\\\\frontend\\\\src\\\\modules\\\\guiones\\\\components\"\" && cat \"d:DOCUMENTOS USUARIODesktopappStudiofrontendsrcApp.css \")",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"SaaS dashboard dark luxury AI content generator studio professional\" --design-system -p \"Studio AI Guiones\" -f markdown)",
+      "Bash(python3 skills/ui-ux-pro-max/scripts/search.py \"SaaS dashboard dark luxury AI content generator studio professional\" --design-system -p \"Studio AI Guiones\" -f markdown)"
     ],
     "additionalDirectories": [
       "d:\\DOCUMENTOS USUARIO\\Desktop\\appStudio\\frontend\\src\\modules\\generador"

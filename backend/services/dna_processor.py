@@ -145,7 +145,7 @@ def _build_docs_block(files: list[dict]) -> str:
     blocks = []
     for f in files:
         label = ZONE_LABELS.get(f["zone"], f["zone"].upper())
-        blocks.append(f"=== {label}: {f['filename']} ===\n{f['text'][:15000]}")
+        blocks.append(f"=== {label}: {f['filename']} ===\n{f['text'][:8000]}")
     return "\n\n".join(blocks)
 
 
@@ -163,11 +163,18 @@ def process_dna_with_claude(files: list[dict], api_key: str) -> dict:
     user_prompt = _DNA_USER_TMPL.format(docs=docs_block)
 
     response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=4096,
+        model="claude-sonnet-4-6",
+        max_tokens=16000,
         system=_DNA_SYSTEM,
         messages=[{"role": "user", "content": user_prompt}],
     )
+
+    # Detectar respuesta truncada antes de parsear
+    if response.stop_reason == "max_tokens":
+        raise ValueError(
+            "La respuesta de Claude fue cortada porque los archivos son muy grandes. "
+            "Reduce el número de archivos o usa documentos más cortos."
+        )
 
     raw = response.content[0].text.strip()
 
@@ -175,7 +182,10 @@ def process_dna_with_claude(files: list[dict], api_key: str) -> dict:
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Claude devolvió JSON inválido: {e}. Respuesta parcial: {raw[:200]}")
 
 
 # ── Persistencia en disco ───────────────────────────────────────────────────

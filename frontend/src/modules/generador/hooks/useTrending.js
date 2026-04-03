@@ -12,13 +12,13 @@ export function useTrending() {
   const [error, setError]           = useState(null)
   const [transcripts, setTranscripts] = useState({})     // { [video_id]: { status, data } }
 
-  const fetchTrending = useCallback(async (nicho, region) => {
+  const fetchTrending = useCallback(async (nicho, region, hours = 72) => {
     if (!nicho.trim()) return
     setStatus("loading")
     setError(null)
     setVideos([])
     try {
-      const params = new URLSearchParams({ nicho, region })
+      const params = new URLSearchParams({ nicho, region, hours })
       const res = await fetch(`${API}/api/generador/trending?${params}`, {
         headers: authHeaders(),
       })

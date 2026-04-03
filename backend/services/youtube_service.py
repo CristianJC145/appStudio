@@ -48,7 +48,7 @@ def _duration_minutes(iso: str) -> int:
     return h * 60 + mi + (1 if s >= 30 else 0)
 
 
-def search_trending_videos(nicho: str, region: str, max_results: int = 5) -> list[dict]:
+def search_trending_videos(nicho: str, region: str, max_results: int = 5, hours: int = 72) -> list[dict]:
     """
     Busca videos del nicho en YouTube.
     Retorna lista de dicts con: id, titulo, canal, vistas, duracion, duracion_minutos,
@@ -66,9 +66,9 @@ def search_trending_videos(nicho: str, region: str, max_results: int = 5) -> lis
 
     region_code = _get_region_code(region)
 
-    # 1. Buscar videos del nicho publicados en las últimas 72 horas
+    # 1. Buscar videos del nicho publicados en el período indicado
     from datetime import datetime, timedelta, timezone
-    published_after = (datetime.now(timezone.utc) - timedelta(hours=72)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    published_after = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     search_resp = yt.search().list(
         part="snippet",

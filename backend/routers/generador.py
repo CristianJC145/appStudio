@@ -136,11 +136,12 @@ def delete_dna(user: dict = Depends(get_current_user)):
 def get_trending(
     nicho:  str,
     region: str,
+    hours:  int = 72,
     user: dict = Depends(get_current_user),
 ):
     """Busca videos trending del nicho en la región dada."""
     try:
-        videos = youtube_service.search_trending_videos(nicho, region)
+        videos = youtube_service.search_trending_videos(nicho, region, hours=hours)
         return {"videos": videos}
     except ValueError as e:
         # API key no configurada — retornar lista vacía con flag

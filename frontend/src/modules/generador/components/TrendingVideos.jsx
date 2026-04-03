@@ -11,6 +11,15 @@ const REGIONS = [
   { value: "global",    label: "Global" },
 ]
 
+const TIME_RANGES = [
+  { value: "24",   label: "Últimas 24 h" },
+  { value: "48",   label: "Últimas 48 h" },
+  { value: "72",   label: "Últimas 72 h" },
+  { value: "168",  label: "Última semana" },
+  { value: "336",  label: "Últimas 2 semanas" },
+  { value: "720",  label: "Último mes" },
+]
+
 const IconSearch = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -65,13 +74,14 @@ export default function TrendingVideos({
 }) {
   const [nicho,      setNicho]      = useState("")
   const [region,     setRegion]     = useState("colombia")
+  const [hours,      setHours]      = useState("72")
   const [manualMode, setManualMode] = useState(false)
   const [manualTitle, setManualTitle] = useState("")
 
   const handleSearch = (e) => {
     e.preventDefault()
     if (!nicho.trim()) return
-    onSearch(nicho, region)
+    onSearch(nicho, region, parseInt(hours, 10))
   }
 
   const handleSelect = (video) => {
@@ -122,6 +132,18 @@ export default function TrendingVideos({
             >
               {REGIONS.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="gi-hours">Período</label>
+            <select
+              id="gi-hours"
+              value={hours}
+              onChange={e => setHours(e.target.value)}
+            >
+              {TIME_RANGES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
           </div>

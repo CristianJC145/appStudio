@@ -92,7 +92,13 @@ Extrae:
 5. AFIRMACIONES MODELO: si el canal usa afirmaciones, extrae las que mejor funcionaron y define sus características (longitud, tiempo verbal, uso de metáforas, etc.)
 6. FÓRMULA DE COMBINACIÓN ÓPTIMA: basado en los datos, cuál es la combinación de tono + estructura + dirección energética que maximiza el rendimiento.
 
-Responde SOLO en JSON válido con esta estructura exacta:
+Responde SOLO en JSON válido con esta estructura exacta.
+REGLAS CRÍTICAS para el JSON:
+- No uses comillas dobles dentro de los valores de texto. Usa comillas simples o reescribe la frase para evitarlas.
+- No incluyas saltos de línea dentro de los strings; usa espacios.
+- No añadas comentarios ni texto fuera del JSON.
+- Todos los arrays deben tener al menos un elemento o ser [].
+
 {{
   "voz_estilo": {{
     "muletillas": [],
@@ -182,10 +188,16 @@ def process_dna_with_claude(files: list[dict], api_key: str) -> dict:
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
+    # Extract outermost JSON object — ignores any text Claude adds before/after
+    start = raw.find("{")
+    end   = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        raw = raw[start:end + 1]
+
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Claude devolvió JSON inválido: {e}. Respuesta parcial: {raw[:200]}")
+        raise ValueError(f"Claude devolvió JSON inválido: {e}. Respuesta parcial: {raw[:300]}")
 
 
 # ── Persistencia en disco ───────────────────────────────────────────────────

@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
   voice_id: "3fRg3Y6XXL8gnxYFuN1z",
   model_id: "eleven_multilingual_v2",
   language_code: "es",
+  output_format: "mp3_44100_128",
   voice_settings: {
     stability: 0.45,
     similarity_boost: 0.95,

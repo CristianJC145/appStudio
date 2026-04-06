@@ -103,6 +103,7 @@ class Config(BaseModel):
     voice_id: str = "3fRg3Y6XXL8gnxYFuN1z"
     model_id: str = "eleven_multilingual_v2"
     language_code: str = "es"
+    output_format: str = "mp3_44100_128"
     voice_settings: VoiceSettings = VoiceSettings()
     intro_voice_speed: float = 1.0
     intro_tempo_factor: float = 0.98
@@ -155,16 +156,16 @@ class ReviewDecision(BaseModel):
 def silencio(ms: int) -> "AudioSegment":
     return AudioSegment.silent(duration=ms)
 
-def hash_texto(texto: str, voice_speed: float, settings: dict) -> str:
+def hash_texto(texto: str, voice_speed: float, settings: dict, output_format: str = "") -> str:
     contenido = json.dumps(
-        {"texto": texto, "settings": settings, "speed": voice_speed},
+        {"texto": texto, "settings": settings, "speed": voice_speed, "fmt": output_format},
         sort_keys=True
     )
     return hashlib.md5(contenido.encode()).hexdigest()[:10]
 
 def ruta_cache(carpeta: Path, prefijo: str, indice: int, texto: str,
-               voice_speed: float, settings: dict) -> Path:
-    h = hash_texto(texto, voice_speed, settings)
+               voice_speed: float, settings: dict, output_format: str = "") -> Path:
+    h = hash_texto(texto, voice_speed, settings, output_format)
     return carpeta / f"{prefijo}_{indice:05d}_{h}.wav"
 
 def _atempo_chain(factor: float) -> str:
@@ -272,7 +273,8 @@ def _break_largo(ms: int, max_s: float = 3.0) -> str:
 
 def texto_a_audio_api(texto: str, ruta_salida: Path,
                       voice_speed: float, cfg: Config) -> bool:
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}"
+    fmt = getattr(cfg, "output_format", "mp3_44100_128") or "mp3_44100_128"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}?output_format={fmt}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
     texto_tts = insertar_breaks_ssml(texto, cfg)
     payload = {
@@ -296,7 +298,8 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
                    voice_speed: float, tempo_factor: float, cfg: Config,
                    force_regen: bool = False) -> Optional["AudioSegment"]:
     settings_dict = cfg.voice_settings.model_dump()
-    ruta = ruta_cache(carpeta, prefijo, indice, texto, voice_speed, settings_dict)
+    fmt = getattr(cfg, "output_format", "mp3_44100_128") or "mp3_44100_128"
+    ruta = ruta_cache(carpeta, prefijo, indice, texto, voice_speed, settings_dict, fmt)
     if force_regen and ruta.exists():
         ruta.unlink()
     if not ruta.exists():
@@ -922,15 +925,42 @@ def finalize_section(job_id: str, section: str):
     return {"ok": True}
 
 
+_FORMAT_MEDIA = {
+    "wav":  "audio/wav",
+    "mp3":  "audio/mpeg",
+    "flac": "audio/flac",
+    "ogg":  "audio/ogg",
+}
+
 @router.get("/download/{job_id}")
-def download(job_id: str):
+def download(job_id: str, format: str = "wav", bitrate: str = "192k"):
     if job_id not in jobs:
         raise HTTPException(404, "Job no encontrado")
     output = jobs[job_id].get("output_file")
     if not output or not Path(output).exists():
         raise HTTPException(404, "Archivo no disponible aún")
+
+    fmt    = format.lower() if format.lower() in _FORMAT_MEDIA else "wav"
     nombre = jobs[job_id].get("nombre", "meditacion")
-    return FileResponse(output, media_type="audio/wav", filename=f"{nombre}.wav")
+
+    if fmt == "wav":
+        return FileResponse(output, media_type="audio/wav", filename=f"{nombre}.wav")
+
+    # Convertir al vuelo con pydub
+    audio  = AudioSegment.from_file(output)
+    buf    = tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False)
+    export_kwargs = {}
+    if fmt == "mp3":
+        export_kwargs["bitrate"] = bitrate
+    audio.export(buf.name, format=fmt, **export_kwargs)
+    buf.close()
+
+    return FileResponse(
+        buf.name,
+        media_type=_FORMAT_MEDIA[fmt],
+        filename=f"{nombre}.{fmt}",
+        background=None,
+    )
 
 
 @router.get("/history")

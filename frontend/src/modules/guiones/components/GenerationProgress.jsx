@@ -1,4 +1,11 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
+
+const DOWNLOAD_FORMATS = [
+  { value: "wav",  label: "WAV",       sub: "Lossless · sin compresión" },
+  { value: "mp3",  label: "MP3 192k",  sub: "Alta calidad · más ligero", bitrate: "192k" },
+  { value: "mp3",  label: "MP3 128k",  sub: "Calidad estándar",          bitrate: "128k" },
+  { value: "flac", label: "FLAC",      sub: "Lossless comprimido" },
+]
 
 const EVENT_ICONS = {
   start:               "◈",
@@ -60,6 +67,7 @@ export default function GenerationProgress({
   reviewSection, onGoReview, pendingReview
 }) {
   const logRef = useRef(null)
+  const [dlFormat, setDlFormat] = useState(DOWNLOAD_FORMATS[1]) // MP3 192k por defecto
 
   useEffect(() => {
     if (logRef.current) {
@@ -110,12 +118,33 @@ export default function GenerationProgress({
           <div className="download-banner-info">
             <div className="download-banner-title">Audio generado con éxito</div>
             <div className="download-banner-sub">
-              {durationMins ? `${durationMins} minutos · WAV` : "WAV"}
+              {durationMins ? `${durationMins} minutos` : "Listo"}
             </div>
           </div>
-          <a href={downloadUrl} download className="btn btn-primary btn-lg">
-            ↓ Descargar
-          </a>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {DOWNLOAD_FORMATS.map((fmt, i) => {
+                const active = dlFormat === fmt
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setDlFormat(fmt)}
+                    className={`btn btn-sm ${active ? "btn-primary" : "btn-ghost"}`}
+                    title={fmt.sub}
+                  >
+                    {fmt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <a
+              href={`${downloadUrl}?format=${dlFormat.value}${dlFormat.bitrate ? `&bitrate=${dlFormat.bitrate}` : ""}`}
+              download
+              className="btn btn-primary btn-lg"
+            >
+              ↓ Descargar {dlFormat.label}
+            </a>
+          </div>
         </div>
       )}
 

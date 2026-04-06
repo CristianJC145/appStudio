@@ -249,9 +249,16 @@ def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
         t = texto
 
     # Párrafos: si ya hay un break antes del \n\n, reemplazarlo por break_parrafo
+    # Solo reemplazar si el break existente es menor que break_parrafo; si es mayor, conservarlo.
     if cfg.break_parrafo > 0:
         brk = b(cfg.break_parrafo)
-        t = re.sub(r' <break time="[\d.]+s"/>([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
+        t = re.sub(
+            r' <break time="([\d.]+)s"/>([ \t]*\n[ \t]*\n)',
+            lambda m: (f' <break time="{m.group(1)}s"/>{m.group(2)}'
+                       if float(m.group(1)) >= cfg.break_parrafo
+                       else f' {brk}{m.group(2)}'),
+            t
+        )
         t = re.sub(r'(?<!/>)([ \t]*\n[ \t]*\n)', f' {brk}\\1', t)
 
     # Eliminar breaks sobrantes al final
@@ -438,7 +445,7 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[l
             buf_t = linea
             buf_l = [linea]
         elif len(buf_t) < cfg.min_chars_parrafo:
-            candidato = buf_t + " " + sep + " " + linea
+            candidato = buf_t + " " + sep + "\n\n" + linea
             if len(candidato) <= cfg.max_chars_parrafo:
                 buf_t = candidato
                 buf_l.append(linea)
@@ -453,7 +460,7 @@ def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[l
         if (grupos_t
                 and len(buf_t) < cfg.min_chars_parrafo
                 and len(grupos_t[-1]) + len(sep) + 2 + len(buf_t) <= cfg.max_chars_parrafo):
-            grupos_t[-1] = grupos_t[-1] + " " + sep + " " + buf_t
+            grupos_t[-1] = grupos_t[-1] + " " + sep + "\n\n" + buf_t
             grupos_l[-1].extend(buf_l)
         else:
             grupos_t.append(buf_t);  grupos_l.append(buf_l)

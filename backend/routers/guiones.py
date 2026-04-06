@@ -294,6 +294,14 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
         time.sleep(2 ** intento)
     return False
 
+def _load_audio(ruta: Path, output_format: str) -> "AudioSegment":
+    """Carga audio teniendo en cuenta que PCM es raw y necesita parámetros explícitos."""
+    if output_format.startswith("pcm_"):
+        rate = int(output_format.split("_")[1])   # pcm_44100 → 44100
+        return AudioSegment.from_raw(str(ruta), sample_width=2, frame_rate=rate, channels=1)
+    return AudioSegment.from_file(ruta)
+
+
 def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
                    voice_speed: float, tempo_factor: float, cfg: Config,
                    force_regen: bool = False) -> Optional["AudioSegment"]:
@@ -306,7 +314,7 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
         ok = texto_a_audio_api(texto, ruta, voice_speed, cfg)
         if not ok:
             return None
-    audio = AudioSegment.from_file(ruta)
+    audio = _load_audio(ruta, fmt)
     if cfg.extend_silence:
         audio = extender_silencios_internos(audio, cfg)
     if tempo_factor != 1.0:

@@ -295,10 +295,19 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
     return False
 
 def _load_audio(ruta: Path, output_format: str) -> "AudioSegment":
-    """Carga audio teniendo en cuenta que PCM es raw y necesita parámetros explícitos."""
+    """Carga audio. Para PCM crudo (sin cabecera) envuelve los bytes en un WAV en memoria."""
     if output_format.startswith("pcm_"):
+        import wave, io
         rate = int(output_format.split("_")[1])   # pcm_44100 → 44100
-        return AudioSegment.from_raw(str(ruta), sample_width=2, frame_rate=rate, channels=1)
+        raw  = ruta.read_bytes()
+        buf  = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)      # 16-bit PCM
+            wf.setframerate(rate)
+            wf.writeframes(raw)
+        buf.seek(0)
+        return AudioSegment.from_wav(buf)
     return AudioSegment.from_file(ruta)
 
 

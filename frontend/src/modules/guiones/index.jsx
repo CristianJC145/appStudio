@@ -56,10 +56,36 @@ const TABS = [
 
 const API = import.meta.env.VITE_API_URL
 
+// ── Persistencia de job por usuario ─────────────────────────────────────────
+function getUserId() {
+  try {
+    const token = localStorage.getItem("studio_token")
+    if (!token) return null
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+    return String(payload.id ?? payload.sub ?? payload.user_id ?? "")
+  } catch { return null }
+}
+
+function jobStorageKey(userId) { return `review_job_${userId}` }
+
+function saveJobId(userId, jobId) {
+  if (!userId) return
+  try { localStorage.setItem(jobStorageKey(userId), jobId) } catch {}
+}
+
+function loadJobId(userId) {
+  if (!userId) return null
+  return localStorage.getItem(jobStorageKey(userId)) || null
+}
+
+function clearJobId(userId) {
+  if (!userId) return
+  localStorage.removeItem(jobStorageKey(userId))
+}
+
 export default function GuionesModule() {
   const [tab, setTab] = useState("editor")
 
-  // Inicializar desde sessionStorage (síncrono → render inmediato sin flash)
   const [config, setConfig] = useState(() => {
     try {
       const saved = sessionStorage.getItem("medi_config")
@@ -67,7 +93,6 @@ export default function GuionesModule() {
     } catch { return DEFAULT_CONFIG }
   })
 
-  // Al montar: sincronizar desde el servidor (compartido entre usuarios con misma api_key)
   useEffect(() => {
     const apiKey = config.api_key
     if (!apiKey) return
@@ -107,18 +132,16 @@ export default function GuionesModule() {
   const [generating, setGenerating]       = useState(false)
   const esRef        = useRef(null)
   const saveTimerRef = useRef(null)
+  const userIdRef    = useRef(getUserId())
 
   const addEvent = useCallback((evt) => {
     setEvents(prev => [...prev, { ...evt, ts: Date.now() }])
   }, [])
 
-  // saveConfig acepta valor directo O función updater (igual que el setter de React).
-  // Guarda en localStorage inmediatamente y debounce el POST al servidor (1.5 s).
   const saveConfig = useCallback((nextOrUpdater) => {
     setConfig(prev => {
       const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater
       sessionStorage.setItem("medi_config", JSON.stringify(next))
-      // Debounce: evita un POST por cada movimiento de slider
       if (next.api_key) {
         clearTimeout(saveTimerRef.current)
         saveTimerRef.current = setTimeout(() => {
@@ -131,6 +154,102 @@ export default function GuionesModule() {
       }
       return next
     })
+  }, [])
+
+  // ── Conectar / reconectar SSE ──────────────────────────────────────────────
+  const connectSSE = useCallback((id) => {
+    if (esRef.current) esRef.current.close()
+    const es = new EventSource(`${API}/api/events/${id}`)
+    esRef.current = es
+
+    es.onmessage = (e) => {
+      const evt = JSON.parse(e.data)
+      addEvent(evt)
+
+      if (evt.type === "intro_start")  setIntroBloques(new Array(evt.data.total).fill(""))
+      if (evt.type === "intro_ready") {
+        setIntroAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+        setIntroBloques(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+      }
+      if (evt.type === "intro_review_start") { setReviewSection("intro"); setJobStatus("awaiting_review"); setTab("review") }
+      if (evt.type === "intro_review_done")  setReviewSection(null)
+
+      if (evt.type === "afirm_start") setAfirmaciones(new Array(evt.data.total).fill(""))
+      if (evt.type === "afirm_ready") {
+        setAfirmAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+        setAfirmaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+      }
+      if (evt.type === "afirm_review_start") { setReviewSection("afirm"); setJobStatus("awaiting_review"); setTab("review") }
+      if (evt.type === "afirm_review_done")  setReviewSection(null)
+
+      if (evt.type === "medit_start") setMeditaciones(new Array(evt.data.total).fill(""))
+      if (evt.type === "medit_ready") {
+        setMeditAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
+        setMeditaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+      }
+      if (evt.type === "medit_review_start") { setReviewSection("medit"); setJobStatus("awaiting_review"); setTab("review") }
+      if (evt.type === "medit_review_done")  setReviewSection(null)
+
+      if (evt.type === "building") { setJobStatus("building"); setTab("progress") }
+      if (evt.type === "done") {
+        setDownloadUrl(`${API}${evt.data.download_url}`)
+        setDurationMins(evt.data.duration_mins)
+        setJobStatus("done")
+        setGenerating(false)
+        setTab("progress")
+        clearJobId(userIdRef.current)
+        es.close()
+      }
+      if (evt.type === "error") {
+        setJobStatus("error")
+        setGenerating(false)
+        clearJobId(userIdRef.current)
+        es.close()
+      }
+    }
+    es.onerror = () => { es.close(); setGenerating(false) }
+  }, [addEvent])
+
+  // ── Restaurar job al recargar página ──────────────────────────────────────
+  useEffect(() => {
+    const userId = userIdRef.current
+    const savedJobId = loadJobId(userId)
+    if (!savedJobId) return
+
+    fetch(`${API}/api/job/${savedJobId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(job => {
+        if (!job) { clearJobId(userId); return }
+
+        setJobId(savedJobId)
+        setGenerating(job.status !== "done" && job.status !== "error")
+        setTab("progress")
+
+        // Restaurar decisiones ya enviadas desde el estado del backend
+        if (job.intro_decisions)  setIntroDecisions(job.intro_decisions)
+        if (job.afirm_decisions)  setAfirmDecisions(job.afirm_decisions)
+        if (job.medit_decisions)  setMeditDecisions(job.medit_decisions)
+
+        // Reconectar SSE — replaya todos los eventos desde el inicio
+        connectSSE(savedJobId)
+      })
+      .catch(() => clearJobId(userId))
+  }, [connectSSE]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Cancelar job en curso ─────────────────────────────────────────────────
+  const cancelJob = useCallback(() => {
+    if (esRef.current) { esRef.current.close(); esRef.current = null }
+    clearJobId(userIdRef.current)
+    setJobId(null)
+    setJobStatus(null)
+    setGenerating(false)
+    setReviewSection(null)
+    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({})
+    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({})
+    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({})
+    setDownloadUrl(null); setDurationMins(null)
+    setEvents([])
+    setTab("editor")
   }, [])
 
   const startGeneration = async () => {
@@ -148,7 +267,7 @@ export default function GuionesModule() {
     setJobStatus("starting")
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/generate`, {
+      const res = await fetch(`${API}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guion, config, nombre }),
@@ -156,56 +275,9 @@ export default function GuionesModule() {
       const data = await res.json()
       const id   = data.job_id
       setJobId(id)
+      saveJobId(userIdRef.current, id)
       setTab("progress")
-
-      if (esRef.current) esRef.current.close()
-      const es = new EventSource(`${import.meta.env.VITE_API_URL}/api/events/${id}`)
-      esRef.current = es
-
-      es.onmessage = (e) => {
-        const evt = JSON.parse(e.data)
-        addEvent(evt)
-
-        if (evt.type === "intro_start")  setIntroBloques(new Array(evt.data.total).fill(""))
-        if (evt.type === "intro_ready") {
-          setIntroAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setIntroBloques(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
-        }
-        if (evt.type === "intro_review_start") { setReviewSection("intro"); setJobStatus("awaiting_review"); setTab("review") }
-        if (evt.type === "intro_review_done")  setReviewSection(null)
-
-        if (evt.type === "afirm_start") setAfirmaciones(new Array(evt.data.total).fill(""))
-        if (evt.type === "afirm_ready") {
-          setAfirmAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setAfirmaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
-        }
-        if (evt.type === "afirm_review_start") { setReviewSection("afirm"); setJobStatus("awaiting_review"); setTab("review") }
-        if (evt.type === "afirm_review_done")  setReviewSection(null)
-
-        if (evt.type === "medit_start") setMeditaciones(new Array(evt.data.total).fill(""))
-        if (evt.type === "medit_ready") {
-          setMeditAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
-          setMeditaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
-        }
-        if (evt.type === "medit_review_start") { setReviewSection("medit"); setJobStatus("awaiting_review"); setTab("review") }
-        if (evt.type === "medit_review_done")  setReviewSection(null)
-
-        if (evt.type === "building") { setJobStatus("building"); setTab("progress") }
-        if (evt.type === "done") {
-          setDownloadUrl(`${import.meta.env.VITE_API_URL}${evt.data.download_url}`)
-          setDurationMins(evt.data.duration_mins)
-          setJobStatus("done")
-          setGenerating(false)
-          setTab("progress")
-          es.close()
-        }
-        if (evt.type === "error") {
-          setJobStatus("error")
-          setGenerating(false)
-          es.close()
-        }
-      }
-      es.onerror = () => { es.close(); setGenerating(false) }
+      connectSSE(id)
     } catch (err) {
       alert("Error conectando al backend: " + err.message)
       setGenerating(false)
@@ -226,7 +298,7 @@ export default function GuionesModule() {
       if (newText && decision === "regenerate")
         setMeditaciones(prev => { const u = [...prev]; u[index] = newText; return u })
     }
-    await fetch(`${import.meta.env.VITE_API_URL}/api/review`, {
+    await fetch(`${API}/api/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ job_id: jobId, section, index, decision, new_text: newText || null }),
@@ -239,7 +311,7 @@ export default function GuionesModule() {
     for (let i = 0; i < items.length; i++) {
       if (!decisions[i]) await submitDecision(section, i, "ok")
     }
-    await fetch(`${import.meta.env.VITE_API_URL}/api/finalize/${jobId}/${section}`, { method: "POST" })
+    await fetch(`${API}/api/finalize/${jobId}/${section}`, { method: "POST" })
     setJobStatus("running")
     setTab("progress")
   }
@@ -253,7 +325,6 @@ export default function GuionesModule() {
 
   return (
     <div className="module-page fade-up">
-      {/* Navegación interna del módulo */}
       <nav className="module-nav">
         {TABS.map(({ id, label }) => {
           const badge = id === "progress" && generating ? "●"
@@ -270,9 +341,17 @@ export default function GuionesModule() {
             </button>
           )
         })}
+        {generating && (
+          <button
+            className="nav-btn"
+            style={{ marginLeft: "auto", color: "var(--danger, #e05c5c)" }}
+            onClick={cancelJob}
+          >
+            Cancelar generación
+          </button>
+        )}
       </nav>
 
-      {/* Contenido */}
       <div className="module-content">
         {tab === "editor" && (
           <div className="editor-layout">

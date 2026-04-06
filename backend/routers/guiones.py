@@ -153,8 +153,11 @@ class ReviewDecision(BaseModel):
 #  LÓGICA DE AUDIO
 # =============================================================
 
-def silencio(ms: int) -> "AudioSegment":
-    return AudioSegment.silent(duration=ms)
+def silencio(ms: int, frame_rate: int = 44100, channels: int = 1) -> "AudioSegment":
+    seg = AudioSegment.silent(duration=ms, frame_rate=frame_rate)
+    if channels > 1:
+        seg = seg.set_channels(channels)
+    return seg
 
 def hash_texto(texto: str, voice_speed: float, settings: dict, output_format: str = "") -> str:
     contenido = json.dumps(
@@ -192,7 +195,9 @@ def aplicar_tempo(audio: "AudioSegment", factor: float) -> "AudioSegment":
         subprocess.run(
             ["ffmpeg", "-y", "-i", tmp_in.name,
              "-filter:a", _atempo_chain(factor),
-             "-ar", str(audio.frame_rate), tmp_out.name],
+             "-ar", str(audio.frame_rate),
+             "-c:a", "pcm_s16le",
+             tmp_out.name],
             check=True, capture_output=True
         )
         return AudioSegment.from_wav(tmp_out.name)

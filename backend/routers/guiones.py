@@ -117,7 +117,7 @@ class Config(BaseModel):
     pausa_afirm_a_medit: int = 3000
     pausa_entre_meditaciones: int = 5000
     # SSML breaks por puntuación
-    usar_ssml_breaks: bool = True
+    usar_ssml_breaks: bool = False
     break_coma: float = 0.5
     break_punto: float = 0.7
     break_suspensivos: float = 0.8

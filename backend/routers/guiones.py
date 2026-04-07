@@ -291,7 +291,8 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
     fmt = getattr(cfg, "output_format", "mp3_44100_128") or "mp3_44100_128"
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}?output_format={fmt}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
-    texto_tts = insertar_breaks_ssml(texto, cfg)
+    texto_api = texto.replace(",", ", ---")
+    texto_tts = insertar_breaks_ssml(texto_api, cfg)
     texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts).strip()
     payload = {
         "text": texto_tts,

@@ -127,6 +127,9 @@ class Config(BaseModel):
     break_exclamacion: float = 0.7
     break_interrogacion: float = 0.7
     break_parrafo: float = 1.0
+    # Calentamiento de voz (warmup)
+    usar_calentamiento: bool = True
+    texto_calentamiento: str = "Cada minuto que paso dormido es un minuto de construcción de mi nuevo cuerpo."
     # Post-proceso
     extend_silence: bool = False
     factor_coma: float = 1.0
@@ -289,6 +292,7 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}?output_format={fmt}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
     texto_tts = insertar_breaks_ssml(texto, cfg)
+    texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts).strip()
     payload = {
         "text": texto_tts,
         "model_id": cfg.model_id,
@@ -323,6 +327,26 @@ def _load_audio(ruta: Path, output_format: str) -> "AudioSegment":
     return AudioSegment.from_file(ruta)
 
 
+def _trim_calentamiento(audio: "AudioSegment") -> "AudioSegment":
+    """
+    Elimina del inicio del audio el texto de calentamiento.
+    Busca el primer silencio >= 300 ms después de los primeros 800 ms
+    (tiempo mínimo que ocupa la oración de calentamiento) y corta ahí.
+    """
+    min_start_ms = 800
+    silencios = detect_silence(
+        audio[min_start_ms:],
+        min_silence_len=300,
+        silence_thresh=-38,
+    )
+    if silencios:
+        s_ini, s_fin = silencios[0]
+        corte = min_start_ms + (s_ini + s_fin) // 2
+        recortado = audio[corte:]
+        return recortado if len(recortado) > 200 else audio
+    return audio
+
+
 def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
                    voice_speed: float, tempo_factor: float, cfg: Config,
                    force_regen: bool = False) -> Optional["AudioSegment"]:
@@ -332,9 +356,29 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
     if force_regen and ruta.exists():
         ruta.unlink()
     if not ruta.exists():
-        ok = texto_a_audio_api(texto, ruta, voice_speed, cfg)
-        if not ok:
-            return None
+        usar_warmup = (
+            cfg.usar_calentamiento
+            and cfg.texto_calentamiento
+            and prefijo in ("intro", "medit")
+        )
+        if usar_warmup:
+            texto_api = cfg.texto_calentamiento + "\n\n" + texto
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp.close()
+            tmp_path = Path(tmp.name)
+            try:
+                ok = texto_a_audio_api(texto_api, tmp_path, voice_speed, cfg)
+                if not ok:
+                    return None
+                audio_raw = _load_audio(tmp_path, fmt)
+                audio_trimmed = _trim_calentamiento(audio_raw)
+                audio_trimmed.export(str(ruta), format="wav")
+            finally:
+                tmp_path.unlink(missing_ok=True)
+        else:
+            ok = texto_a_audio_api(texto, ruta, voice_speed, cfg)
+            if not ok:
+                return None
     audio = _load_audio(ruta, fmt)
     if cfg.extend_silence:
         audio = extender_silencios_internos(audio, cfg)

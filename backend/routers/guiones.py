@@ -293,7 +293,9 @@ def texto_a_audio_api(texto: str, ruta_salida: Path,
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
     texto_api = texto.replace(",", ", ---")
     texto_tts = insertar_breaks_ssml(texto_api, cfg)
-    texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts).strip()
+    if not cfg.usar_ssml_breaks:
+        texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts)
+    texto_tts = texto_tts.strip()
     payload = {
         "text": texto_tts,
         "model_id": cfg.model_id,

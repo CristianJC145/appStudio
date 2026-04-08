@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"youtube channel portfolio sponsor media kit spirituality luxury dark\" --design-system -p \"Ingenieria de la Manifestacion\" -f markdown)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"luxury dark premium media kit sponsor deck\" --domain landing -n 5)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"cinematic dark editorial luxury\" --domain style -n 3)",
+      "Bash(find 'd:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio' -type f -name *.py -o -name *.jsx -o -name *.js)",
+      "Bash(python \"d:/DOCUMENTOS USUARIO/Desktop/appStudio/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"dark studio login auth SaaS minimal elegant apple\" --design-system -p \"Studio Login\")",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import routers.guiones; print\\(''OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Read(//d//**)",
+      "Bash(ls \"d:\\\\DOCUMENTOS USUARIO\\\\Desktop\\\\appStudio\\\\frontend\\\\src\\\\modules\\\\guiones\\\\components\"\" && cat \"d:DOCUMENTOS USUARIODesktopappStudiofrontendsrcApp.css \")",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"SaaS dashboard dark luxury AI content generator studio professional\" --design-system -p \"Studio AI Guiones\" -f markdown)",
+      "Bash(python3 skills/ui-ux-pro-max/scripts/search.py \"SaaS dashboard dark luxury AI content generator studio professional\" --design-system -p \"Studio AI Guiones\" -f markdown)"
+    ],
+    "additionalDirectories": [
+      "d:\\DOCUMENTOS USUARIO\\Desktop\\appStudio\\frontend\\src\\modules\\generador"
+    ]
+  }
+}

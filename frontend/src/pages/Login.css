@@ -10,8 +10,8 @@
   --lg-blue:    #4ab8d4;
   --lg-blue2:   #6dcfe8;
   --lg-blue3:   rgba(74,184,212,0.12);
-  --lg-gold:    #d4a843;
-  --lg-gold2:   #e8c96b;
+  --lg-gold:    #4ab8d4;
+  --lg-gold2:   #6dcfe8;
   --lg-tx:      #e8f0f8;
   --lg-tx2:     rgba(200,220,240,0.55);
   --lg-tx3:     rgba(180,200,220,0.30);
@@ -52,7 +52,7 @@ body.login-body {
 }
 .lg-orb-2 {
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(212,168,67,0.10) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(74,184,212,0.10) 0%, transparent 70%);
   bottom: -150px; right: -100px;
   animation: lg-orb-drift2 22s ease-in-out infinite;
 }

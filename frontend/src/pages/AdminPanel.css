@@ -12,8 +12,8 @@
 .ap-admin-pill {
   display: inline-flex; align-items: center;
   padding: 3px 10px; border-radius: 100px;
-  background: rgba(212,168,67,0.12);
-  border: 1px solid rgba(212,168,67,0.30);
+  background: rgba(74,184,212,0.12);
+  border: 1px solid rgba(74,184,212,0.30);
   color: var(--gold2);
   font-size: 0.65rem; font-weight: 700;
   letter-spacing: 0.10em; text-transform: uppercase;
@@ -157,7 +157,7 @@
   color: var(--tx3); cursor: pointer;
   transition: color var(--t), background var(--t);
 }
-.ap-icon-btn:hover { color: var(--gold3); background: rgba(212,168,67,0.07); }
+.ap-icon-btn:hover { color: var(--gold3); background: rgba(74,184,212,0.07); }
 .ap-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .ap-spin { display: flex; animation: ap-spin 0.7s linear infinite; }
@@ -212,8 +212,8 @@
   transition: border-color var(--t);
 }
 .ap-role-select:focus { border-color: var(--gold3); }
-.ap-role-select.admin { color: var(--gold2); border-color: rgba(212,168,67,0.28); background: rgba(212,168,67,0.07); }
-.ap-role-select option { background: #0c0a05; color: var(--tx); }
+.ap-role-select.admin { color: var(--gold2); border-color: rgba(74,184,212,0.28); background: rgba(74,184,212,0.07); }
+.ap-role-select option { background: #060a0f; color: var(--tx); }
 
 .ap-status-pill {
   display: inline-flex; align-items: center;
@@ -247,12 +247,12 @@
   padding: 14px 16px; border-radius: 10px;
   background: rgba(255,255,255,0.02);
   border: 1px solid var(--bd-dim);
-  border-left: 2px solid rgba(212,168,67,0.20);
+  border-left: 2px solid rgba(74,184,212,0.20);
   transition: background 0.18s ease, border-left-color 0.18s ease;
 }
 .ap-future-card:hover {
-  background: rgba(212,168,67,0.03);
-  border-left-color: rgba(212,168,67,0.45);
+  background: rgba(74,184,212,0.03);
+  border-left-color: rgba(74,184,212,0.45);
 }
 .ap-future-icon { font-size: 1.15rem; flex-shrink: 0; margin-top: 1px; }
 .ap-future-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -268,8 +268,8 @@
   font-size: 0.60rem; font-weight: 600;
   letter-spacing: 0.06em; color: var(--gold3);
   font-family: var(--ff-mono);
-  background: rgba(212,168,67,0.08);
-  border: 1px solid rgba(212,168,67,0.18);
+  background: rgba(74,184,212,0.08);
+  border: 1px solid rgba(74,184,212,0.18);
   padding: 2px 7px; border-radius: 100px;
 }
 

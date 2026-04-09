@@ -131,7 +131,8 @@ export default function StudioLanding() {
 
               <h1 className="sl-hero-title sl-reveal sl-reveal-d1">
                 Agentia<br />
-                <span className="sl-hero-title-accent">Studio</span>
+                <span className="sl-hero-title-accent">Studio</span><br />
+                Test
               </h1>
 
               <p className="sl-hero-desc sl-reveal sl-reveal-d2">

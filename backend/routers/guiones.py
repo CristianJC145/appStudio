@@ -370,9 +370,9 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
         usar_warmup = (
             cfg.usar_calentamiento
             and cfg.texto_calentamiento
-            and prefijo in ("intro", "medit", "afirm")
+            and prefijo in ("intro", "medit")
         )
-        es_intro_medit = prefijo in ("intro", "medit")
+        es_intro_medit = prefijo in ("intro", "medit", "afirm")
         if usar_warmup:
             calentamiento_con_break = re.sub(r'\s*$', ' <break time="2.0s"/>', cfg.texto_calentamiento.rstrip())
             texto_api = calentamiento_con_break + "\n\n" + texto
@@ -865,8 +865,18 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
             )
             # Lista plana de afirmaciones individuales (una por card de revisión)
             afirmaciones = [l for lineas in afirm_lineas_x_grupo for l in lineas]
-            jobs[job_id]["afirmaciones"]    = afirmaciones
-            jobs[job_id]["afirm_decisions"] = {}
+            # Mapeo flat_idx → (grp_idx, pos_en_grupo) para regeneración
+            afirm_flat_to_grp: dict[int, tuple[int, int]] = {}
+            flat = 0
+            for grp_idx, lineas in enumerate(afirm_lineas_x_grupo):
+                for pos in range(len(lineas)):
+                    afirm_flat_to_grp[flat] = (grp_idx, pos)
+                    flat += 1
+            jobs[job_id]["afirmaciones"]        = afirmaciones
+            jobs[job_id]["afirm_grupos"]        = afirm_grupos
+            jobs[job_id]["afirm_lineas_x_grupo"] = afirm_lineas_x_grupo
+            jobs[job_id]["afirm_flat_to_grp"]   = afirm_flat_to_grp
+            jobs[job_id]["afirm_decisions"]     = {}
 
             emit_event(job_id, "afirm_start", {
                 "total": len(afirmaciones),
@@ -925,11 +935,74 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
             })
             jobs[job_id]["status"] = "awaiting_review"
 
-            _esperar_revision(
-                job_id, "afirm", afirmaciones, carpeta, "afirm",
-                cfg.afirm_voice_speed, cfg.afirm_tempo_factor, cfg,
-                event_ready="afirm_ready", event_regenerating="afirm_regenerating"
-            )
+            # Loop de revisión custom: respeta el agrupamiento min/max al regenerar
+            _review_event_afirm = threading.Event()
+            job_locks[f"{job_id}_afirm"] = _review_event_afirm
+
+            while True:
+                decisions = jobs[job_id].get("afirm_decisions", {})
+                pending = [i for i in range(len(afirmaciones)) if i not in decisions]
+                if not pending:
+                    break
+                _review_event_afirm.wait(timeout=300)
+                _review_event_afirm.clear()
+
+                for flat_i in list(decisions.keys()):
+                    if decisions[flat_i] != "regenerate":
+                        continue
+                    emit_event(job_id, "afirm_regenerating", {
+                        "index": flat_i, "section": "afirm",
+                        "message": f"Regenerando afirmación {flat_i + 1}..."
+                    })
+                    grp_idx, _ = afirm_flat_to_grp[flat_i]
+                    grupo_texto  = afirm_grupos[grp_idx]
+                    grupo_lineas = afirm_lineas_x_grupo[grp_idx]
+                    n_en_grupo   = len(grupo_lineas)
+
+                    # Regenera el grupo completo para respetar la regla min/max
+                    audio_grp, characters, char_end_ms = _cargar_grupo_afirm_timestamps(
+                        grupo_texto, carpeta, grp_idx, cfg.afirm_voice_speed, cfg,
+                        force_regen=True
+                    )
+
+                    if audio_grp and n_en_grupo > 1:
+                        raw_segs = _cortar_por_timestamps(
+                            audio_grp, characters, char_end_ms, grupo_lineas
+                        )
+                    elif audio_grp:
+                        raw_segs = [audio_grp]
+                    else:
+                        raw_segs = [None] * n_en_grupo
+
+                    grp_flat_start = sum(
+                        len(afirm_lineas_x_grupo[g]) for g in range(grp_idx)
+                    )
+                    for pos, seg in enumerate(raw_segs):
+                        target_flat = grp_flat_start + pos
+                        # No sobreescribir previews ya aprobados
+                        if decisions.get(target_flat) not in (None, "regenerate"):
+                            continue
+                        if seg is None:
+                            continue
+                        seg = _trim_silence(seg)
+                        if cfg.afirm_tempo_factor != 1.0:
+                            seg = aplicar_tempo(seg, cfg.afirm_tempo_factor)
+                        if cfg.extend_silence:
+                            seg = extender_silencios_internos(seg, cfg)
+                        audio_url = _guardar_preview(seg, job_id, "afirm", target_flat)
+                        emit_event(job_id, "afirm_ready", {
+                            "index": target_flat, "section": "afirm",
+                            "text": afirmaciones[target_flat], "audio_url": audio_url,
+                            "message": f"Afirmación {target_flat + 1} regenerada"
+                        })
+
+                    # Marca como resueltas todas las afirmaciones del grupo
+                    # (por si varias del mismo grupo pedían regeneración simultánea)
+                    for pos in range(n_en_grupo):
+                        target = grp_flat_start + pos
+                        if decisions.get(target) == "regenerate":
+                            del decisions[target]
+
             emit_event(job_id, "afirm_review_done", {"message": "Revisión de afirmaciones completada"})
 
         # ── MEDITACIÓN ────────────────────────────────────────

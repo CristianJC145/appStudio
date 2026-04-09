@@ -287,15 +287,21 @@ def _break_largo(ms: int, max_s: float = 3.0) -> str:
 
 
 def texto_a_audio_api(texto: str, ruta_salida: Path,
-                      voice_speed: float, cfg: Config) -> bool:
+                      voice_speed: float, cfg: Config,
+                      skip_punctuation_breaks: bool = False) -> bool:
     fmt = getattr(cfg, "output_format", "mp3_44100_128") or "mp3_44100_128"
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}?output_format={fmt}"
     headers = {"xi-api-key": cfg.api_key, "Content-Type": "application/json"}
-    texto_api = texto.replace(",", ", ---")
-    texto_tts = insertar_breaks_ssml(texto_api, cfg)
-    if not cfg.usar_ssml_breaks:
-        texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts)
-    texto_tts = texto_tts.strip()
+    if skip_punctuation_breaks:
+        # Para intro/meditación: conservar breaks ya existentes en el texto (ej. calentamiento)
+        # pero no agregar nuevos por puntuación ni reemplazar comas.
+        texto_tts = texto.strip()
+    else:
+        texto_api = texto.replace(",", ", ---")
+        texto_tts = insertar_breaks_ssml(texto_api, cfg)
+        if not cfg.usar_ssml_breaks:
+            texto_tts = re.sub(r'<break\b[^>]*/>', '', texto_tts)
+        texto_tts = texto_tts.strip()
     payload = {
         "text": texto_tts,
         "model_id": cfg.model_id,
@@ -364,13 +370,15 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
             and cfg.texto_calentamiento
             and prefijo in ("intro", "medit")
         )
+        es_intro_medit = prefijo in ("intro", "medit")
         if usar_warmup:
             texto_api = cfg.texto_calentamiento + "\n\n" + texto
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp.close()
             tmp_path = Path(tmp.name)
             try:
-                ok = texto_a_audio_api(texto_api, tmp_path, voice_speed, cfg)
+                ok = texto_a_audio_api(texto_api, tmp_path, voice_speed, cfg,
+                                       skip_punctuation_breaks=es_intro_medit)
                 if not ok:
                     return None
                 audio_raw = _load_audio(tmp_path, fmt)
@@ -379,7 +387,8 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
             finally:
                 tmp_path.unlink(missing_ok=True)
         else:
-            ok = texto_a_audio_api(texto, ruta, voice_speed, cfg)
+            ok = texto_a_audio_api(texto, ruta, voice_speed, cfg,
+                                   skip_punctuation_breaks=es_intro_medit)
             if not ok:
                 return None
     audio = _load_audio(ruta, fmt)

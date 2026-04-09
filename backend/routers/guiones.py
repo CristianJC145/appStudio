@@ -339,13 +339,14 @@ def _load_audio(ruta: Path, output_format: str) -> "AudioSegment":
 def _trim_calentamiento(audio: "AudioSegment") -> "AudioSegment":
     """
     Elimina del inicio del audio el texto de calentamiento.
-    Busca el primer silencio >= 300 ms después de los primeros 800 ms
-    (tiempo mínimo que ocupa la oración de calentamiento) y corta ahí.
+    Busca el primer silencio >= 800 ms después de los primeros 3000 ms.
+    min_silence_len=800 ignora pausas naturales del habla (<500ms) y solo
+    detecta el break explícito (1.5s) que se inserta tras la oración de calentamiento.
     """
-    min_start_ms = 800
+    min_start_ms = 3000
     silencios = detect_silence(
         audio[min_start_ms:],
-        min_silence_len=300,
+        min_silence_len=800,
         silence_thresh=-38,
     )
     if silencios:

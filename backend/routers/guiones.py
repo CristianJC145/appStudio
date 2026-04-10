@@ -26,6 +26,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 try:
+    from langdetect import detect as _langdetect
+    LANGDETECT_AVAILABLE = True
+except ImportError:
+    LANGDETECT_AVAILABLE = False
+
+try:
     from pydub import AudioSegment
     from pydub.silence import detect_silence, detect_leading_silence
     PYDUB_AVAILABLE = True
@@ -85,6 +91,78 @@ TEXTO_REF_PAUSAS = (
 )
 # ───────────────────────────────────────────────────────────────────────────
 
+# Mini-diccionario de frases de relleno para el calentamiento de voz.
+# Ordenadas de mayor a menor longitud para que _get_warmup_text pueda
+# seleccionar la combinación mínima que supere min_chars_parrafo.
+WARMUP_FRASES: dict[str, list[str]] = {
+    "es": [
+        "Respira profundamente y siente cómo cada célula de tu cuerpo se llena de energía renovada.",
+        "Cada pensamiento que eliges con intención abre una puerta hacia tu mejor versión.",
+        "Tu voz fluye con naturalidad, con calidez y con una presencia serena.",
+        "Siente la calma que se expande suavemente desde tu centro hacia todo tu ser.",
+        "Permite que la paz interior guíe cada palabra que pronuncias.",
+        "Estás presente, enfocado y en plena armonía contigo mismo.",
+        "Tu energía es clara, tu mente está abierta.",
+        "Respira y confía.",
+    ],
+    "en": [
+        "Take a deep breath and feel how every cell in your body fills with renewed energy.",
+        "Every thought you choose with intention opens a door toward your best self.",
+        "Your voice flows naturally, with warmth and a calm, grounded presence.",
+        "Feel the peace expanding gently from your center outward to your whole being.",
+        "Allow your inner calm to guide every word you speak.",
+        "You are present, focused, and in full harmony with yourself.",
+        "Your energy is clear, your mind is open.",
+        "Breathe and trust.",
+    ],
+}
+
+
+def _detectar_idioma(texto: str) -> Optional[str]:
+    """
+    Detecta el idioma del texto usando langdetect.
+    Usa los primeros 500 chars para rapidez.
+    Devuelve el código ISO 639-1 (ej. 'es', 'en') o None si falla.
+    """
+    if not LANGDETECT_AVAILABLE or not texto.strip():
+        return None
+    try:
+        return _langdetect(texto[:500])
+    except Exception:
+        return None
+
+
+def _get_warmup_text(cfg: "Config") -> str:
+    """
+    Devuelve el texto de calentamiento activo.
+
+    Prioridad:
+      1. cfg.texto_calentamiento si el usuario lo rellenó manualmente.
+      2. Frases de WARMUP_FRASES según cfg.language_code, concatenadas en orden
+         (de mayor a menor) hasta superar cfg.min_chars_parrafo con el mínimo
+         de caracteres posible. Evita quemar tokens innecesarios en ElevenLabs.
+      3. Fallback a español si el idioma no está en el diccionario.
+    """
+    if cfg.texto_calentamiento and cfg.texto_calentamiento.strip():
+        return cfg.texto_calentamiento.strip()
+
+    frases = WARMUP_FRASES.get(cfg.language_code, WARMUP_FRASES["es"])
+    target = cfg.min_chars_parrafo
+    resultado = ""
+    # Cicla las frases en orden hasta superar el umbral
+    for frase in frases:
+        resultado = (resultado + " " + frase).strip() if resultado else frase
+        if len(resultado) >= target:
+            return resultado
+    # Si agotamos el diccionario y aún no alcanzamos, repetimos en ciclo
+    idx = 0
+    while len(resultado) < target:
+        frase = frases[idx % len(frases)]
+        resultado = resultado + " " + frase
+        idx += 1
+    return resultado
+
+
 jobs: dict[str, dict] = {}
 job_events: dict[str, list] = defaultdict(list)
 job_locks: dict[str, threading.Event] = {}
@@ -130,7 +208,7 @@ class Config(BaseModel):
     break_parrafo: float = 1.0
     # Calentamiento de voz (warmup)
     usar_calentamiento: bool = True
-    texto_calentamiento: str = "Cada minuto que paso dormido es un minuto de construcción de mi nuevo cuerpo."
+    texto_calentamiento: str = ""  # vacío = auto-selección por language_code
     # Post-proceso
     extend_silence: bool = False
     factor_coma: float = 1.0
@@ -139,7 +217,7 @@ class Config(BaseModel):
     silence_thresh_db: int = -40
     silence_min_ms: int = 80
     max_chars_parrafo: int = 270
-    min_chars_parrafo: int = 100
+    min_chars_parrafo: int = 170
 
 class GenerateRequest(BaseModel):
     guion: str
@@ -369,12 +447,12 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
     if not ruta.exists():
         usar_warmup = (
             cfg.usar_calentamiento
-            and cfg.texto_calentamiento
             and prefijo in ("intro", "medit")
         )
         es_intro_medit = prefijo in ("intro", "medit", "afirm")
         if usar_warmup:
-            calentamiento_con_break = re.sub(r'\s*$', ' <break time="2.0s"/>', cfg.texto_calentamiento.rstrip())
+            warmup_text = _get_warmup_text(cfg)
+            calentamiento_con_break = re.sub(r'\s*$', ' <break time="2.0s"/>', warmup_text)
             texto_api = calentamiento_con_break + "\n\n" + texto
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp.close()
@@ -442,8 +520,8 @@ def _construir_bloques(texto: str, cfg: Config) -> list[str]:
     máximo de caracteres, ya que se antepone a cada segmento antes del TTS.
     """
     # Overhead del calentamiento: texto + ' <break time="2.0s"/>\n\n'
-    if cfg.usar_calentamiento and cfg.texto_calentamiento:
-        _warmup_overhead = len(cfg.texto_calentamiento.rstrip()) + 23
+    if cfg.usar_calentamiento:
+        _warmup_overhead = len(_get_warmup_text(cfg)) + 23
     else:
         _warmup_overhead = 0
     max_chars = cfg.max_chars_parrafo - _warmup_overhead
@@ -755,10 +833,11 @@ def _regenerar_afirm_individual(
     ruta = carpeta / f"afirm_regen_{indice:05d}_{hash_texto(texto, voice_speed, cfg.voice_settings.model_dump(), fmt)}.wav"
     ruta.unlink(missing_ok=True)  # siempre fuerza regeneración
 
-    usar_warmup = cfg.usar_calentamiento and cfg.texto_calentamiento
+    usar_warmup = cfg.usar_calentamiento
     if usar_warmup:
+        warmup_text = _get_warmup_text(cfg)
         calentamiento_con_break = re.sub(
-            r'\s*$', ' <break time="2.0s"/>', cfg.texto_calentamiento.rstrip()
+            r'\s*$', ' <break time="2.0s"/>', warmup_text
         )
         texto_api = calentamiento_con_break + "\n\n" + texto
     else:
@@ -851,6 +930,12 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         tiene_intro = bool(secciones["intro"])
         tiene_afirm = bool(secciones["afirmaciones"])
         tiene_medit = bool(secciones.get("meditacion", ""))
+
+        # Detección automática de idioma: sobrescribe language_code si el texto
+        # detectado difiere del configurado (protección ante usuarios descuidados).
+        idioma_detectado = _detectar_idioma(guion)
+        if idioma_detectado and idioma_detectado != cfg.language_code:
+            cfg.language_code = idioma_detectado
 
         emit_event(job_id, "start", {
             "tiene_intro": tiene_intro,

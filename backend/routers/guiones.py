@@ -92,8 +92,6 @@ TEXTO_REF_PAUSAS = (
 # ───────────────────────────────────────────────────────────────────────────
 
 # Mini-diccionario de frases de relleno para el calentamiento de voz.
-# Ordenadas de mayor a menor longitud para que _get_warmup_text pueda
-# seleccionar la combinación mínima que supere min_chars_parrafo.
 WARMUP_FRASES: dict[str, list[str]] = {
     "es": [
         "Respira profundamente y siente cómo cada célula de tu cuerpo se llena de energía renovada.",
@@ -132,35 +130,86 @@ def _detectar_idioma(texto: str) -> Optional[str]:
         return None
 
 
-def _get_warmup_text(cfg: "Config") -> str:
-    """
-    Devuelve el texto de calentamiento activo.
+# =============================================================
+#  WARMUP: funciones independientes por sección
+# =============================================================
 
-    Prioridad:
-      1. cfg.texto_calentamiento si el usuario lo rellenó manualmente.
-      2. Frases de WARMUP_FRASES según cfg.language_code, concatenadas en orden
-         (de mayor a menor) hasta superar cfg.min_chars_parrafo con el mínimo
-         de caracteres posible. Evita quemar tokens innecesarios en ElevenLabs.
-      3. Fallback a español si el idioma no está en el diccionario.
+def _warmup_intro_medit(cfg: "Config") -> str:
+    """
+    Warmup para INTRO y MEDITACIÓN: una sola frase corta.
+    Intro/medit tienen segmentos largos que ya cumplen min_chars por sí solos;
+    el warmup solo necesita acondicionar la voz, no inflar el conteo de tokens.
     """
     if cfg.texto_calentamiento and cfg.texto_calentamiento.strip():
         return cfg.texto_calentamiento.strip()
-
     frases = WARMUP_FRASES.get(cfg.language_code, WARMUP_FRASES["es"])
-    target = cfg.min_chars_parrafo
+    return frases[0]
+
+
+def _warmup_afirm_regen(cfg: "Config", texto_afirm: str = "") -> str:
+    """
+    Warmup para REGENERACIÓN de afirmaciones individuales.
+    Las afirmaciones pueden ser muy cortas; concatena frases del diccionario
+    hasta que warmup + afirmación superen min_chars_parrafo, sin pasarse más
+    de lo necesario para no quemar tokens de más.
+    """
+    if cfg.texto_calentamiento and cfg.texto_calentamiento.strip():
+        return cfg.texto_calentamiento.strip()
+    frases = WARMUP_FRASES.get(cfg.language_code, WARMUP_FRASES["es"])
+    needed = max(0, cfg.min_chars_parrafo - len(texto_afirm))
     resultado = ""
-    # Cicla las frases en orden hasta superar el umbral
     for frase in frases:
         resultado = (resultado + " " + frase).strip() if resultado else frase
-        if len(resultado) >= target:
+        if len(resultado) >= needed:
             return resultado
-    # Si agotamos el diccionario y aún no alcanzamos, repetimos en ciclo
+    # Si agotamos el diccionario (needed muy alto), ciclar frases
     idx = 0
-    while len(resultado) < target:
-        frase = frases[idx % len(frases)]
-        resultado = resultado + " " + frase
+    while len(resultado) < needed:
+        resultado = resultado + " " + frases[idx % len(frases)]
         idx += 1
     return resultado
+
+
+# =============================================================
+#  CONSTRUCTORES DE BLOQUES: independientes por sección
+# =============================================================
+
+def _bloques_intro(texto: str, cfg: "Config") -> list[str]:
+    """
+    Divide el texto de INTRO en bloques respetando min/max chars.
+    Descuenta el overhead del warmup (una frase corta + break + \\n\\n).
+    """
+    warmup_overhead = len(_warmup_intro_medit(cfg)) + 23 if cfg.usar_calentamiento else 0
+    return _construir_bloques(texto, cfg, warmup_overhead)
+
+
+def _bloques_medit(texto: str, cfg: "Config") -> list[str]:
+    """
+    Divide el texto de MEDITACIÓN en bloques respetando min/max chars.
+    Lógica idéntica a intro hoy; función propia para poder divergir después.
+    """
+    warmup_overhead = len(_warmup_intro_medit(cfg)) + 23 if cfg.usar_calentamiento else 0
+    return _construir_bloques(texto, cfg, warmup_overhead)
+
+
+# =============================================================
+#  GENERADORES DE AUDIO: independientes por sección
+# =============================================================
+
+def _audio_intro(texto: str, carpeta: "Path", indice: int,
+                 cfg: "Config", force_regen: bool = False) -> "Optional[AudioSegment]":
+    """Genera (o carga de caché) el audio de un bloque de INTRO."""
+    return cargar_oracion(texto, carpeta, "intro", indice,
+                          cfg.intro_voice_speed, cfg.intro_tempo_factor, cfg,
+                          force_regen=force_regen)
+
+
+def _audio_medit(texto: str, carpeta: "Path", indice: int,
+                 cfg: "Config", force_regen: bool = False) -> "Optional[AudioSegment]":
+    """Genera (o carga de caché) el audio de un bloque de MEDITACIÓN."""
+    return cargar_oracion(texto, carpeta, "medit", indice,
+                          cfg.medit_voice_speed, cfg.medit_tempo_factor, cfg,
+                          force_regen=force_regen)
 
 
 jobs: dict[str, dict] = {}
@@ -353,18 +402,6 @@ def insertar_breaks_ssml(texto: str, cfg: Config) -> str:
     return t
 
 
-def _break_largo(ms: int, max_s: float = 3.0) -> str:
-    """Convierte ms a serie de <break/> de máx max_s s (límite ElevenLabs)."""
-    restante = ms / 1000
-    partes = []
-    while restante > max_s:
-        partes.append(f'<break time="{max_s:.1f}s"/>')
-        restante -= max_s
-    if restante > 0:
-        partes.append(f'<break time="{restante:.1f}s"/>')
-    return ' '.join(partes)
-
-
 def texto_a_audio_api(texto: str, ruta_salida: Path,
                       voice_speed: float, cfg: Config,
                       skip_punctuation_breaks: bool = False) -> bool:
@@ -451,7 +488,7 @@ def cargar_oracion(texto: str, carpeta: Path, prefijo: str, indice: int,
         )
         es_intro_medit = prefijo in ("intro", "medit", "afirm")
         if usar_warmup:
-            warmup_text = _get_warmup_text(cfg)
+            warmup_text = _warmup_intro_medit(cfg)
             calentamiento_con_break = re.sub(r'\s*$', ' <break time="2.0s"/>', warmup_text)
             texto_api = calentamiento_con_break + "\n\n" + texto
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -509,22 +546,15 @@ def emit_event(job_id: str, event_type: str, data: dict):
     if job_id in jobs:
         jobs[job_id]["last_event"] = {"type": event_type, "data": data}
 
-def _construir_bloques(texto: str, cfg: Config) -> list[str]:
+def _construir_bloques(texto: str, cfg: Config,
+                       warmup_overhead: int = 0) -> list[str]:
     """
-    Divide el texto en bloques para TTS.
-    Trata cada línea como unidad y las fusiona con \\n\\n hasta alcanzar
-    min_chars, preservando la estructura para que insertar_breaks_ssml
-    pueda agregar los breaks de párrafo correctamente.
-
-    Cuando el calentamiento está activo se descuenta su overhead del límite
-    máximo de caracteres, ya que se antepone a cada segmento antes del TTS.
+    Utilidad interna: divide texto en bloques respetando min/max chars.
+    warmup_overhead: chars del warmup + break ya calculados por la sección
+    que llama (_bloques_intro, _bloques_medit). No llamar directamente
+    desde el loop de generación; usar las funciones de sección.
     """
-    # Overhead del calentamiento: texto + ' <break time="2.0s"/>\n\n'
-    if cfg.usar_calentamiento:
-        _warmup_overhead = len(_get_warmup_text(cfg)) + 23
-    else:
-        _warmup_overhead = 0
-    max_chars = cfg.max_chars_parrafo - _warmup_overhead
+    max_chars = cfg.max_chars_parrafo - warmup_overhead
     min_chars = cfg.min_chars_parrafo
 
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
@@ -653,49 +683,6 @@ def _trim_silence(
     return trimmed if len(trimmed) > 200 else seg   # fallback si quedó vacío
 
 
-def _split_audio_at_silences(
-    audio: "AudioSegment",
-    n: int,
-    min_silence_ms: int = 1500,
-    silence_thresh_db: int = -38
-) -> list["AudioSegment"]:
-    """
-    Divide `audio` en exactamente `n` segmentos usando los (n-1) silencios
-    más largos como puntos de corte (se corta en el punto medio del silencio).
-
-    Garantías:
-    - Siempre devuelve una lista de exactamente `n` AudioSegment.
-    - Si no hay suficientes silencios detectables, hace fallback a división
-      por duración igual (mejor que nada y sin riesgo de IndexError).
-    """
-    if n == 1:
-        return [audio]
-
-    silencios = detect_silence(audio, min_silence_len=min_silence_ms,
-                               silence_thresh=silence_thresh_db)
-
-    if len(silencios) >= n - 1:
-        # Tomamos los (n-1) silencios más largos, ordenados por posición
-        top = sorted(
-            sorted(silencios, key=lambda s: s[1] - s[0], reverse=True)[: n - 1],
-            key=lambda s: s[0],
-        )
-        segmentos: list["AudioSegment"] = []
-        prev = 0
-        for s_ini, s_fin in top:
-            mid = (s_ini + s_fin) // 2
-            segmentos.append(audio[prev:mid])
-            prev = mid
-        segmentos.append(audio[prev:])
-        return segmentos
-
-    # Fallback: división equitativa por duración
-    dur = len(audio)
-    chunk = dur // n
-    return [
-        audio[i * chunk : (i + 1) * chunk if i < n - 1 else dur]
-        for i in range(n)
-    ]
 
 # =============================================================
 #  AFIRMACIONES: TIMESTAMPS API
@@ -832,8 +819,8 @@ def _regenerar_afirm_individual(
     ElevenLabs puede no interpretar de forma consistente.
     """
     usar_warmup = cfg.usar_calentamiento
-    warmup_text = _get_warmup_text(cfg) if usar_warmup else ""
     texto_afirm = texto.strip()
+    warmup_text = _warmup_afirm_regen(cfg, texto_afirm) if usar_warmup else ""
 
     texto_completo = (warmup_text + "\n\n" + texto_afirm) if warmup_text else texto_afirm
 
@@ -909,7 +896,13 @@ def _esperar_revision(job_id: str, section: str, items: list[str],
                       carpeta: Path, prefijo: str,
                       voice_speed: float, tempo_factor: float,
                       cfg: Config, event_ready: str,
-                      event_regenerating: str):
+                      event_regenerating: str,
+                      audio_fn=None):
+    """
+    audio_fn: función de sección opcional (ej. _audio_intro, _audio_medit).
+    Si se provee, se usa para regenerar en lugar de llamar cargar_oracion directamente.
+    Firma esperada: audio_fn(texto, carpeta, indice, cfg, force_regen=True)
+    """
     decision_key = f"{section}_decisions"
     lock_key     = f"{job_id}_{section}"
 
@@ -933,11 +926,14 @@ def _esperar_revision(job_id: str, section: str, items: list[str],
                     "section": section,
                     "message": f"Regenerando segmento {i + 1}..."
                 })
-                audio = cargar_oracion(
-                    items[i], carpeta, prefijo, i,
-                    voice_speed, tempo_factor, cfg,
-                    force_regen=True
-                )
+                if audio_fn is not None:
+                    audio = audio_fn(items[i], carpeta, i, cfg, force_regen=True)
+                else:
+                    audio = cargar_oracion(
+                        items[i], carpeta, prefijo, i,
+                        voice_speed, tempo_factor, cfg,
+                        force_regen=True
+                    )
                 if audio:
                     audio_url = _guardar_preview(audio, job_id, section, i)
                     del decisions[i]
@@ -980,7 +976,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── INTRO ─────────────────────────────────────────────
         bloques_intro = []
         if tiene_intro:
-            bloques_intro = _construir_bloques(secciones["intro"], cfg)
+            bloques_intro = _bloques_intro(secciones["intro"], cfg)
             jobs[job_id]["intro_bloques"]   = bloques_intro
             jobs[job_id]["intro_decisions"] = {}
 
@@ -995,8 +991,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
                     "text": bloque[:80],
                     "message": f"Intro {i + 1}/{len(bloques_intro)}"
                 })
-                audio = cargar_oracion(bloque, carpeta, "intro", i,
-                                       cfg.intro_voice_speed, cfg.intro_tempo_factor, cfg)
+                audio = _audio_intro(bloque, carpeta, i, cfg)
                 if audio:
                     audio_url = _guardar_preview(audio, job_id, "intro", i)
                     emit_event(job_id, "intro_ready", {
@@ -1014,7 +1009,8 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
             _esperar_revision(
                 job_id, "intro", bloques_intro, carpeta, "intro",
                 cfg.intro_voice_speed, cfg.intro_tempo_factor, cfg,
-                event_ready="intro_ready", event_regenerating="intro_regenerating"
+                event_ready="intro_ready", event_regenerating="intro_regenerating",
+                audio_fn=_audio_intro
             )
             emit_event(job_id, "intro_review_done", {"message": "Revisión de intro completada"})
 
@@ -1139,7 +1135,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── MEDITACIÓN ────────────────────────────────────────
         bloques_medit = []
         if tiene_medit:
-            bloques_medit = _construir_bloques(secciones["meditacion"], cfg)
+            bloques_medit = _bloques_medit(secciones["meditacion"], cfg)
             jobs[job_id]["medit_bloques"]   = bloques_medit
             jobs[job_id]["medit_decisions"] = {}
 
@@ -1154,8 +1150,7 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
                     "text": bloque[:80],
                     "message": f"Meditación {i + 1}/{len(bloques_medit)}"
                 })
-                audio = cargar_oracion(bloque, carpeta, "medit", i,
-                                       cfg.medit_voice_speed, cfg.medit_tempo_factor, cfg)
+                audio = _audio_medit(bloque, carpeta, i, cfg)
                 if audio:
                     audio_url = _guardar_preview(audio, job_id, "medit", i)
                     emit_event(job_id, "medit_ready", {
@@ -1173,7 +1168,8 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
             _esperar_revision(
                 job_id, "medit", bloques_medit, carpeta, "medit",
                 cfg.medit_voice_speed, cfg.medit_tempo_factor, cfg,
-                event_ready="medit_ready", event_regenerating="medit_regenerating"
+                event_ready="medit_ready", event_regenerating="medit_regenerating",
+                audio_fn=_audio_medit
             )
             emit_event(job_id, "medit_review_done", {"message": "Revisión de meditación completada"})
 

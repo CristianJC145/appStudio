@@ -95,7 +95,7 @@ TEXTO_REF_PAUSAS = (
 WARMUP_FRASES: dict[str, list[str]] = {
     "es": [
         "Respira profundamente y siente cómo cada célula de tu cuerpo se llena de energía renovada.",
-        "Cada pensamiento que eliges con intención abre una puerta hacia tu mejor versión.",
+        "Empiezan a aparecer situaciones que se sienten exactamente como lo que imaginé.",
         "Tu voz fluye con naturalidad, con calidez y con una presencia serena.",
         "Siente la calma que se expande suavemente desde tu centro hacia todo tu ser.",
         "Permite que la paz interior guíe cada palabra que pronuncias.",

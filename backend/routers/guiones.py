@@ -66,6 +66,43 @@ CONFIG_DIR  = Path("data") / "configs"
 CALIB_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Claves predefinidas del equipo ───────────────────────────────────────────
+# Cada entrada: name (visible en UI), api_key (ElevenLabs), voice_id (voz a usar).
+# Agregar o modificar entradas según las claves del equipo.
+PREDEFINED_KEYS = [
+    {
+        "name": "Elevenlabs 1",
+        "api_key": "dd15fc77bf3a163f41e678cf29f8018fc0c43e756081a6e4dcbd6bc66ae5e251",
+        "voice_id": "3fRg3Y6XXL8gnxYFuN1z",
+    },
+
+    {
+        "name": "Elevenlabs 2",
+        "api_key": "b0fc40540c7b02fee92991da921085b5c4aabb7d908bfb17e97123c3e9b286c6",
+        "voice_id": "0ZflTCV1dnNGRdqxOiW6",
+    },
+]
+
+def _get_subscription_info(api_key: str) -> dict:
+    """Consulta /v1/user/subscription de ElevenLabs y devuelve info de créditos."""
+    try:
+        r = requests.get(
+            "https://api.elevenlabs.io/v1/user/subscription",
+            headers={"xi-api-key": api_key},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            d = r.json()
+            return {
+                "character_count": d.get("character_count", 0),
+                "character_limit": d.get("character_limit", 0),
+                "tier": d.get("tier", ""),
+                "next_reset": d.get("next_character_count_reset_unix", 0),
+            }
+    except Exception:
+        pass
+    return {}
+
 # Puntos de referencia: cubre el rango usado + un poco más para no extrapolar en los bordes.
 # El rango práctico es 0.89–1.0, así que los puntos van de 0.86 a 1.02.
 SPEEDS_REFERENCIA = [0.86, 0.88, 0.89, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02]
@@ -669,7 +706,7 @@ def _trim_silence(
     seg: "AudioSegment",
     thresh_db: int = -38,
     chunk_ms: int = 10,
-    keep_ms: int = 80,
+    keep_ms: int = 150,
 ) -> "AudioSegment":
     """
     Elimina el silencio al inicio y al final del segmento.
@@ -789,12 +826,16 @@ def _cortar_por_timestamps(
     cursor = 0
     prev_ms = 0
 
+    TAIL_MS = 200  # margen tras el último carácter para capturar la cola fonética
     for linea in lineas[:-1]:
         pos = aligned_text.find(linea, cursor)
         if pos == -1:
             pos = cursor  # fallback: continuar desde donde estábamos
         idx_fin = pos + len(linea) - 1
-        cut_ms = int(char_end_ms[idx_fin]) if idx_fin < len(char_end_ms) else len(audio)
+        if idx_fin < len(char_end_ms):
+            cut_ms = min(int(char_end_ms[idx_fin]) + TAIL_MS, len(audio))
+        else:
+            cut_ms = len(audio)
         segmentos.append(audio[prev_ms:cut_ms])
         prev_ms = cut_ms
         cursor = pos + len(linea)
@@ -954,6 +995,9 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         jobs[job_id]["status"] = "running"
         carpeta = CARPETA_TEMP / nombre
         carpeta.mkdir(parents=True, exist_ok=True)
+
+        # Créditos antes de iniciar
+        subscription_antes = _get_subscription_info(cfg.api_key)
 
         secciones   = detectar_secciones(guion)
         tiene_intro = bool(secciones["intro"])
@@ -1239,6 +1283,13 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         audio_final.export(str(ruta_salida), format="wav")
         mins = len(audio_final) / 60_000
 
+        # Créditos después de generar
+        subscription_despues = _get_subscription_info(cfg.api_key)
+        chars_usados = max(0, subscription_despues.get("character_count", 0)
+                           - subscription_antes.get("character_count", 0))
+        chars_restantes = subscription_despues.get("character_limit", 0) \
+                        - subscription_despues.get("character_count", 0)
+
         jobs[job_id]["status"]        = "done"
         jobs[job_id]["output_file"]   = str(ruta_salida)
         jobs[job_id]["duration_mins"] = round(mins, 1)
@@ -1246,7 +1297,10 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         emit_event(job_id, "done", {
             "message": f"Audio generado: {mins:.1f} min",
             "download_url": f"/api/download/{job_id}",
-            "duration_mins": round(mins, 1)
+            "duration_mins": round(mins, 1),
+            "chars_usados":    chars_usados,
+            "chars_restantes": chars_restantes,
+            "chars_limite":    subscription_despues.get("character_limit", 0),
         })
 
     except Exception as e:
@@ -1961,3 +2015,30 @@ def get_voices(api_key: str):
     except Exception:
         pass
     return []
+
+
+@router.get("/keys")
+def get_predefined_keys():
+    """Devuelve la lista de claves predefinidas (solo nombre e índice, sin exponer api_key)."""
+    return [{"index": i, "name": k["name"]} for i, k in enumerate(PREDEFINED_KEYS)]
+
+
+@router.get("/account-info")
+def get_account_info(key_index: int):
+    """
+    Devuelve la info de suscripción de ElevenLabs para la clave seleccionada.
+    También devuelve api_key y voice_id para que el frontend pueda aplicarlos al config.
+    """
+    if key_index < 0 or key_index >= len(PREDEFINED_KEYS):
+        raise HTTPException(status_code=400, detail="Índice de clave inválido")
+    key = PREDEFINED_KEYS[key_index]
+    info = _get_subscription_info(key["api_key"])
+    return {
+        "name":              key["name"],
+        "api_key":           key["api_key"],
+        "voice_id":          key["voice_id"],
+        "character_count":   info.get("character_count", 0),
+        "character_limit":   info.get("character_limit", 0),
+        "tier":              info.get("tier", ""),
+        "next_reset":        info.get("next_reset", 0),
+    }

@@ -130,6 +130,8 @@ export default function GuionesModule() {
   const [reviewSection, setReviewSection] = useState(null)
   const [downloadUrl, setDownloadUrl]     = useState(null)
   const [durationMins, setDurationMins]   = useState(null)
+  const [charsUsados, setCharsUsados]     = useState(null)
+  const [charsRestantes, setCharsRestantes] = useState(null)
   const [generating, setGenerating]       = useState(false)
   const esRef        = useRef(null)
   const saveTimerRef = useRef(null)
@@ -195,6 +197,8 @@ export default function GuionesModule() {
       if (evt.type === "done") {
         setDownloadUrl(`${API}${evt.data.download_url}`)
         setDurationMins(evt.data.duration_mins)
+        if (evt.data.chars_usados    != null) setCharsUsados(evt.data.chars_usados)
+        if (evt.data.chars_restantes != null) setCharsRestantes(evt.data.chars_restantes)
         setJobStatus("done")
         setGenerating(false)
         setTab("progress")
@@ -372,6 +376,8 @@ export default function GuionesModule() {
             jobStatus={jobStatus}
             downloadUrl={downloadUrl}
             durationMins={durationMins}
+            charsUsados={charsUsados}
+            charsRestantes={charsRestantes}
             reviewSection={reviewSection}
             onGoReview={() => setTab("review")}
             pendingReview={reviewSection === "intro" ? pendingIntro : pendingAfirm}

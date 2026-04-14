@@ -64,6 +64,7 @@ function computeProgress(events) {
 
 export default function GenerationProgress({
   events, jobStatus, downloadUrl, durationMins,
+  charsUsados, charsRestantes,
   reviewSection, onGoReview, pendingReview
 }) {
   const logRef = useRef(null)
@@ -120,6 +121,20 @@ export default function GenerationProgress({
             <div className="download-banner-sub">
               {durationMins ? `${durationMins} minutos` : "Listo"}
             </div>
+            {charsUsados != null && (
+              <div style={{ marginTop: 6, fontSize: 12, display: "flex", gap: 14, flexWrap: "wrap" }}>
+                <span>
+                  <span style={{ opacity: 0.6 }}>Caracteres usados: </span>
+                  <strong>{charsUsados.toLocaleString()}</strong>
+                </span>
+                {charsRestantes != null && (
+                  <span>
+                    <span style={{ opacity: 0.6 }}>Restantes: </span>
+                    <strong>{charsRestantes.toLocaleString()}</strong>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>

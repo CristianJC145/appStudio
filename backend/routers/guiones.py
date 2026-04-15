@@ -895,28 +895,48 @@ def _cortar_con_whisper(
     if not words:
         return _fallback_proporcional()
 
-    # ── Cortar por última palabra de cada afirmación ─────────────────────────
+    # ── Cortar por las últimas palabras de cada afirmación ───────────────────
+    # Buscar las últimas 2 palabras como secuencia para evitar falsos positivos
+    # (una sola palabra puede aparecer antes de una coma dentro de la misma afirmación).
     segmentos: list["AudioSegment"] = []
     prev_ms  = 0
     word_idx = 0
 
+    def _palabras_cola(linea: str, n: int = 2) -> list[str]:
+        palabras = [_normalizar_palabra(p) for p in linea.split() if p.strip()]
+        return palabras[-n:] if len(palabras) >= n else palabras
+
+    def _coincide(w_transcrita: str, w_esperada: str) -> bool:
+        return w_transcrita == w_esperada or (
+            len(w_esperada) >= 4 and (w_esperada in w_transcrita or w_transcrita in w_esperada)
+        )
+
     for linea in lineas[:-1]:
-        palabras_linea = [_normalizar_palabra(p) for p in linea.split() if p.strip()]
-        if not palabras_linea:
+        cola = _palabras_cola(linea, n=2)   # últimas 2 palabras (o 1 si la afirmación es muy corta)
+        if not cola:
             continue
-        ultima = palabras_linea[-1]
 
         cut_ms = None
-        for i in range(word_idx, len(words)):
-            w = words[i]["word"]
-            # Match exacto o contenido (maneja palabras con sufijos/prefijos)
-            if w == ultima or (len(ultima) >= 4 and (ultima in w or w in ultima)):
-                cut_ms   = min(words[i]["end_ms"] + 150, len(audio))
-                word_idx = i + 1
+
+        # Intentar match de la secuencia completa de 'cola'
+        n_cola = len(cola)
+        for i in range(word_idx, len(words) - n_cola + 1):
+            if all(_coincide(words[i + j]["word"], cola[j]) for j in range(n_cola)):
+                cut_ms   = min(words[i + n_cola - 1]["end_ms"] + 150, len(audio))
+                word_idx = i + n_cola
                 break
 
+        # Si no encontró la secuencia, intentar solo la última palabra
         if cut_ms is None:
-            # No se encontró: estimación proporcional para esta afirmación
+            ultima = cola[-1]
+            for i in range(word_idx, len(words)):
+                if _coincide(words[i]["word"], ultima):
+                    cut_ms   = min(words[i]["end_ms"] + 150, len(audio))
+                    word_idx = i + 1
+                    break
+
+        if cut_ms is None:
+            # Estimación proporcional como último recurso
             total_chars = sum(len(l) for l in lineas)
             done_chars  = sum(len(l) for l in lineas[:lineas.index(linea) + 1])
             cut_ms = min(int(len(audio) * done_chars / total_chars) + 150, len(audio))

@@ -655,6 +655,11 @@ def _construir_bloques(texto: str, cfg: Config,
     return bloques
 
 
+def _parsear_afirmaciones(texto: str) -> list[str]:
+    """Devuelve las afirmaciones como lista de líneas individuales."""
+    return [l.strip() for l in texto.splitlines() if l.strip()]
+
+
 def _construir_bloques_afirm(texto: str, cfg: Config) -> tuple[list[str], list[list[str]]]:
     """
     Para afirmaciones: fusiona líneas cortas respetando min/max chars.
@@ -813,6 +818,114 @@ def _cargar_grupo_afirm_timestamps(
         time.sleep(2 ** intento)
 
     return None, [], []
+
+
+def _normalizar_palabra(w: str) -> str:
+    """Minúsculas sin acentos ni puntuación — para matching tolerante."""
+    import unicodedata
+    w = unicodedata.normalize("NFKD", w)
+    w = "".join(c for c in w if not unicodedata.combining(c))
+    return re.sub(r"[^\w]", "", w.lower())
+
+
+def _cortar_con_whisper(
+    audio: "AudioSegment",
+    lineas: list[str],
+) -> list["AudioSegment"]:
+    """
+    Divide el audio de un grupo de afirmaciones usando Whisper con
+    word_timestamps=True.  Escucha el audio real, por lo que no depende
+    de la consistencia de ElevenLabs en silencios ni de matching de texto exacto.
+
+    Flujo:
+      1. Exporta el audio a WAV temporal.
+      2. Transcribe con Whisper (modelo ya cargado para calibración).
+      3. Para cada afirmación (excepto la última) busca su última palabra
+         en la secuencia de palabras detectadas y corta justo después.
+      4. Si Whisper no está disponible o falla, hace un fallback proporcional.
+    """
+    if len(lineas) <= 1:
+        return [audio]
+
+    # ── Fallback proporcional ────────────────────────────────────────────────
+    def _fallback_proporcional():
+        dur  = len(audio)
+        total = sum(len(l) for l in lineas)
+        segs, prev = [], 0
+        acum = 0
+        for linea in lineas[:-1]:
+            acum += len(linea)
+            cut = int(dur * acum / total)
+            segs.append(audio[prev:cut])
+            prev = cut
+        segs.append(audio[prev:])
+        return segs
+
+    if not WHISPER_AVAILABLE:
+        return _fallback_proporcional()
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = f.name
+        audio.export(tmp_path, format="wav")
+
+        model  = _get_whisper_model()
+        result = model.transcribe(
+            tmp_path,
+            word_timestamps=True,
+            language=None,   # detección automática
+            fp16=False,
+        )
+    except Exception:
+        return _fallback_proporcional()
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    # Extraer lista plana de palabras con timestamps
+    words: list[dict] = []
+    for seg in result.get("segments", []):
+        for w in seg.get("words", []):
+            words.append({
+                "word":     _normalizar_palabra(w.get("word", "")),
+                "end_ms":   int(w.get("end", 0) * 1000),
+            })
+
+    if not words:
+        return _fallback_proporcional()
+
+    # ── Cortar por última palabra de cada afirmación ─────────────────────────
+    segmentos: list["AudioSegment"] = []
+    prev_ms  = 0
+    word_idx = 0
+
+    for linea in lineas[:-1]:
+        palabras_linea = [_normalizar_palabra(p) for p in linea.split() if p.strip()]
+        if not palabras_linea:
+            continue
+        ultima = palabras_linea[-1]
+
+        cut_ms = None
+        for i in range(word_idx, len(words)):
+            w = words[i]["word"]
+            # Match exacto o contenido (maneja palabras con sufijos/prefijos)
+            if w == ultima or (len(ultima) >= 4 and (ultima in w or w in ultima)):
+                cut_ms   = min(words[i]["end_ms"] + 150, len(audio))
+                word_idx = i + 1
+                break
+
+        if cut_ms is None:
+            # No se encontró: estimación proporcional para esta afirmación
+            total_chars = sum(len(l) for l in lineas)
+            done_chars  = sum(len(l) for l in lineas[:lineas.index(linea) + 1])
+            cut_ms = min(int(len(audio) * done_chars / total_chars) + 150, len(audio))
+
+        segmentos.append(audio[prev_ms:cut_ms])
+        prev_ms = cut_ms
+
+    segmentos.append(audio[prev_ms:])
+    return segmentos
 
 
 def _cortar_por_timestamps(
@@ -1080,25 +1193,14 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
         # ── AFIRMACIONES ──────────────────────────────────────
         afirmaciones = []
         if tiene_afirm:
-            # Grupos para TTS (fusionados para cumplir min_chars) +
-            # líneas originales por grupo (para dividir el audio después)
             afirm_grupos, afirm_lineas_x_grupo = _construir_bloques_afirm(
                 secciones["afirmaciones"], cfg
             )
-            # Lista plana de afirmaciones individuales (una por card de revisión)
             afirmaciones = [l for lineas in afirm_lineas_x_grupo for l in lineas]
-            # Mapeo flat_idx → (grp_idx, pos_en_grupo) para regeneración
-            afirm_flat_to_grp: dict[int, tuple[int, int]] = {}
-            flat = 0
-            for grp_idx, lineas in enumerate(afirm_lineas_x_grupo):
-                for pos in range(len(lineas)):
-                    afirm_flat_to_grp[flat] = (grp_idx, pos)
-                    flat += 1
-            jobs[job_id]["afirmaciones"]        = afirmaciones
-            jobs[job_id]["afirm_grupos"]        = afirm_grupos
+            jobs[job_id]["afirmaciones"]         = afirmaciones
+            jobs[job_id]["afirm_grupos"]         = afirm_grupos
             jobs[job_id]["afirm_lineas_x_grupo"] = afirm_lineas_x_grupo
-            jobs[job_id]["afirm_flat_to_grp"]   = afirm_flat_to_grp
-            jobs[job_id]["afirm_decisions"]     = {}
+            jobs[job_id]["afirm_decisions"]      = {}
 
             emit_event(job_id, "afirm_start", {
                 "total": len(afirmaciones),
@@ -1116,14 +1218,12 @@ def run_generation_job(job_id: str, guion: str, cfg: Config, nombre: str):
                     "message": f"Afirmación {flat_idx + 1}/{len(afirmaciones)}"
                 })
 
-                # Genera el audio del grupo usando /with-timestamps para obtener
-                # puntos de corte exactos por carácter (sin depender de silencios SSML)
                 audio_grp, characters, char_end_ms = _cargar_grupo_afirm_timestamps(
                     grupo_texto, carpeta, i, cfg.afirm_voice_speed, cfg
                 )
 
                 if audio_grp and n_en_grupo > 1:
-                    raw_segs = _cortar_por_timestamps(audio_grp, characters, char_end_ms, grupo_lineas)
+                    raw_segs = _cortar_con_whisper(audio_grp, grupo_lineas)
                 elif audio_grp:
                     raw_segs = [audio_grp]
                 else:

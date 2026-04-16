@@ -67,9 +67,10 @@ Soy el arquitecto de mi propia felicidad.`
             />
           </div>
           <div className="script-hint">
-            <span>[INTRO]</span> → voz narrativa, fluida ·{" "}
-            <span>[AFIRMACIONES]</span> → una por línea, con pausa de {" "}
-            <span>10s</span> entre cada una
+            <span>Usa</span> · {" "}
+            <span>[INTRO]</span> · {" "}
+            <span>[MEDITACION]</span> · {" "}
+            <span>[AFIRMACIONES]</span>
           </div>
         </div>
 

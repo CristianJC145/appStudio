@@ -3,6 +3,9 @@ Meditation Audio Studio — FastAPI Backend
 App principal: monta los routers de cada módulo.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,6 +23,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://app-studio-frontend.qil8rz.easypanel.host",
+    "https://test-agentia.qil8rz.easypanel.host",
 ]
 
 app = FastAPI(title="Meditation Audio Studio", version="3.0.0")

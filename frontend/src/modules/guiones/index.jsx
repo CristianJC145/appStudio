@@ -44,8 +44,8 @@ const DEFAULT_CONFIG = {
   factor_suspensivos: 1.5,
   silence_thresh_db: -40,
   silence_min_ms: 80,
-  max_chars_parrafo: 270,
-  min_chars_parrafo: 100,
+  max_chars_parrafo: 290,
+  min_chars_parrafo: 220,
 }
 
 const TABS = [
@@ -117,19 +117,24 @@ export default function GuionesModule() {
 
   const [introBloques, setIntroBloques]     = useState([])
   const [introAudios, setIntroAudios]       = useState({})
-  const [introDecisions, setIntroDecisions] = useState({})
+  const [introDecisions, setIntroDecisions]         = useState({})
+  const [introRegenerating, setIntroRegenerating]   = useState(new Set())
 
   const [afirmaciones, setAfirmaciones]     = useState([])
   const [afirmAudios, setAfirmAudios]       = useState({})
   const [afirmDecisions, setAfirmDecisions] = useState({})
+  const [afirmRegenerating, setAfirmRegenerating]   = useState(new Set())
 
   const [meditaciones, setMeditaciones]     = useState([])
   const [meditAudios, setMeditAudios]       = useState({})
   const [meditDecisions, setMeditDecisions] = useState({})
+  const [meditRegenerating, setMeditRegenerating]   = useState(new Set())
 
   const [reviewSection, setReviewSection] = useState(null)
   const [downloadUrl, setDownloadUrl]     = useState(null)
   const [durationMins, setDurationMins]   = useState(null)
+  const [charsUsados, setCharsUsados]     = useState(null)
+  const [charsRestantes, setCharsRestantes] = useState(null)
   const [generating, setGenerating]       = useState(false)
   const esRef        = useRef(null)
   const saveTimerRef = useRef(null)
@@ -171,6 +176,7 @@ export default function GuionesModule() {
       if (evt.type === "intro_ready") {
         setIntroAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
         setIntroBloques(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        setIntroRegenerating(prev => { const s = new Set(prev); s.delete(evt.data.index); return s })
       }
       if (evt.type === "intro_review_start") { setReviewSection("intro"); setJobStatus("awaiting_review"); setTab("review") }
       if (evt.type === "intro_review_done")  setReviewSection(null)
@@ -179,6 +185,7 @@ export default function GuionesModule() {
       if (evt.type === "afirm_ready") {
         setAfirmAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
         setAfirmaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        setAfirmRegenerating(prev => { const s = new Set(prev); s.delete(evt.data.index); return s })
       }
       if (evt.type === "afirm_review_start") { setReviewSection("afirm"); setJobStatus("awaiting_review"); setTab("review") }
       if (evt.type === "afirm_review_done")  setReviewSection(null)
@@ -187,6 +194,7 @@ export default function GuionesModule() {
       if (evt.type === "medit_ready") {
         setMeditAudios(prev => ({ ...prev, [evt.data.index]: evt.data.audio_url }))
         setMeditaciones(prev => { const u = [...prev]; u[evt.data.index] = evt.data.text; return u })
+        setMeditRegenerating(prev => { const s = new Set(prev); s.delete(evt.data.index); return s })
       }
       if (evt.type === "medit_review_start") { setReviewSection("medit"); setJobStatus("awaiting_review"); setTab("review") }
       if (evt.type === "medit_review_done")  setReviewSection(null)
@@ -195,6 +203,8 @@ export default function GuionesModule() {
       if (evt.type === "done") {
         setDownloadUrl(`${API}${evt.data.download_url}`)
         setDurationMins(evt.data.duration_mins)
+        if (evt.data.chars_usados    != null) setCharsUsados(evt.data.chars_usados)
+        if (evt.data.chars_restantes != null) setCharsRestantes(evt.data.chars_restantes)
         setJobStatus("done")
         setGenerating(false)
         setTab("progress")
@@ -245,9 +255,9 @@ export default function GuionesModule() {
     setJobStatus(null)
     setGenerating(false)
     setReviewSection(null)
-    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({})
-    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({})
-    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({})
+    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({}); setIntroRegenerating(new Set())
+    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({}); setAfirmRegenerating(new Set())
+    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({}); setMeditRegenerating(new Set())
     setDownloadUrl(null); setDurationMins(null)
     setEvents([])
     setTab("editor")
@@ -259,9 +269,9 @@ export default function GuionesModule() {
 
     setGenerating(true)
     setEvents([])
-    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({})
-    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({})
-    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({})
+    setIntroBloques([]); setIntroAudios({}); setIntroDecisions({}); setIntroRegenerating(new Set())
+    setAfirmaciones([]); setAfirmAudios({}); setAfirmDecisions({}); setAfirmRegenerating(new Set())
+    setMeditaciones([]); setMeditAudios({}); setMeditDecisions({}); setMeditRegenerating(new Set())
     setReviewSection(null)
     setDownloadUrl(null)
     setDurationMins(null)
@@ -290,14 +300,20 @@ export default function GuionesModule() {
       setIntroDecisions(prev => ({ ...prev, [index]: decision }))
       if (newText && decision === "regenerate")
         setIntroBloques(prev => { const u = [...prev]; u[index] = newText; return u })
+      if (decision === "regenerate")
+        setIntroRegenerating(prev => { const s = new Set(prev); s.add(index); return s })
     } else if (section === "afirm") {
       setAfirmDecisions(prev => ({ ...prev, [index]: decision }))
       if (newText && decision === "regenerate")
         setAfirmaciones(prev => { const u = [...prev]; u[index] = newText; return u })
+      if (decision === "regenerate")
+        setAfirmRegenerating(prev => { const s = new Set(prev); s.add(index); return s })
     } else {
       setMeditDecisions(prev => ({ ...prev, [index]: decision }))
       if (newText && decision === "regenerate")
         setMeditaciones(prev => { const u = [...prev]; u[index] = newText; return u })
+      if (decision === "regenerate")
+        setMeditRegenerating(prev => { const s = new Set(prev); s.add(index); return s })
     }
     await fetch(`${API}/api/review`, {
       method: "POST",
@@ -362,7 +378,7 @@ export default function GuionesModule() {
               onGenerate={startGeneration}
               generating={generating}
             />
-            <ConfigPanel config={config} setConfig={saveConfig} />
+            <ConfigPanel config={config} setConfig={saveConfig} userId={userIdRef.current} />
           </div>
         )}
 
@@ -372,6 +388,8 @@ export default function GuionesModule() {
             jobStatus={jobStatus}
             downloadUrl={downloadUrl}
             durationMins={durationMins}
+            charsUsados={charsUsados}
+            charsRestantes={charsRestantes}
             reviewSection={reviewSection}
             onGoReview={() => setTab("review")}
             pendingReview={reviewSection === "intro" ? pendingIntro : pendingAfirm}
@@ -384,6 +402,9 @@ export default function GuionesModule() {
             introBloques={introBloques} introAudios={introAudios} introDecisions={introDecisions}
             afirmaciones={afirmaciones} afirmAudios={afirmAudios} afirmDecisions={afirmDecisions}
             meditaciones={meditaciones} meditAudios={meditAudios} meditDecisions={meditDecisions}
+            introRegenerating={introRegenerating}
+            afirmRegenerating={afirmRegenerating}
+            meditRegenerating={meditRegenerating}
             onDecision={submitDecision}
             onFinalize={finalizeSection}
             jobStatus={jobStatus}

@@ -9,7 +9,19 @@
       "Bash(python skills/ui-ux-pro-max/scripts/search.py \"tech dashboard SaaS dark luxury professional\" --design-system -p \"Meditation Audio Studio\" -f markdown)",
       "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"tech dashboard SaaS dark luxury professional\" --design-system -p \"Meditation Audio Studio\" -f markdown)",
       "Bash(py \".claude/skills/ui-ux-pro-max/scripts/search.py\" \"animation loading state transition dark dashboard\" --domain ux -n 8)",
-      "Bash(py \".claude/skills/ui-ux-pro-max/scripts/search.py\" \"glassmorphism dark premium card dark sidebar\" --domain style -n 5)"
+      "Bash(py \".claude/skills/ui-ux-pro-max/scripts/search.py\" \"glassmorphism dark premium card dark sidebar\" --domain style -n 5)",
+      "Read(//d/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/**)",
+      "Read(//d/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/modules/**)",
+      "Bash(sed -i -e 's/#9a7520/#1a5f7a/g' -e 's/#c9960f/#2a9fbe/g' -e 's/#d4a843/#4ab8d4/g' -e 's/#e8c96b/#6dcfe8/g' -e 's/#f5e6a8/#a8e8f5/g' -e 's/#fdf3d0/#d0f0f8/g' 'd:/DOCUMENTOS USUARIO/Desktop/test/frontend/src/App.css')",
+      "Bash(sed -i -e 's/#060504/#030507/g' -e 's/#0c0a05/#060a0f/g' -e 's/#131008/#0a1018/g' -e 's/#1c1810/#0f1620/g' -e 's/rgba\\(10,8,2,0\\\\.92\\)/rgba\\(3,5,7,0.92\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/test/frontend/src/App.css')",
+      "Bash(sed -i -e 's/#f8f0dc/#e8f0f8/g' -e 's/rgba\\(236,216,154,0\\\\.55\\)/rgba\\(200,220,240,0.55\\)/g' -e 's/rgba\\(225,181,138,0\\\\.62\\)/rgba\\(180,200,220,0.55\\)/g' -e 's/rgba\\(197,166,86,0\\\\.20\\)/rgba\\(100,160,200,0.20\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/test/frontend/src/App.css')",
+      "Bash(sed -i 's/rgba\\(212,168,67,/rgba\\(74,184,212,/g' 'd:/DOCUMENTOS USUARIO/Desktop/test/frontend/src/App.css')",
+      "Bash(sed -i -e 's/rgba\\(4,3,1,0\\\\.92\\)/rgba\\(3,5,7,0.92\\)/g' -e 's/rgba\\(4,3,1,0\\\\.96\\)/rgba\\(3,5,7,0.96\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/test/frontend/src/App.css')",
+      "Bash(sed -i -e 's/#9a7520/#1a5f7a/g' -e 's/#c9960f/#2a9fbe/g' -e 's/#d4a843/#4ab8d4/g' -e 's/#e8c96b/#6dcfe8/g' -e 's/#f5e6a8/#a8e8f5/g' -e 's/#fdf3d0/#d0f0f8/g' 'd:/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/App.css')",
+      "Bash(sed -i -e 's/#060504/#030507/g' -e 's/#0c0a05/#060a0f/g' -e 's/#131008/#0a1018/g' -e 's/#1c1810/#0f1620/g' -e 's/rgba\\(10,8,2,0\\\\.92\\)/rgba\\(3,5,7,0.92\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/App.css')",
+      "Bash(sed -i -e 's/#f8f0dc/#e8f0f8/g' -e 's/rgba\\(236,216,154,0\\\\.55\\)/rgba\\(200,220,240,0.55\\)/g' -e 's/rgba\\(225,181,138,0\\\\.62\\)/rgba\\(180,200,220,0.55\\)/g' -e 's/rgba\\(197,166,86,0\\\\.20\\)/rgba\\(100,160,200,0.20\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/App.css')",
+      "Bash(sed -i 's/rgba\\(212,168,67,/rgba\\(74,184,212,/g' 'd:/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/App.css')",
+      "Bash(sed -i -e 's/rgba\\(4,3,1,0\\\\.92\\)/rgba\\(3,5,7,0.92\\)/g' -e 's/rgba\\(4,3,1,0\\\\.96\\)/rgba\\(3,5,7,0.96\\)/g' 'd:/DOCUMENTOS USUARIO/Desktop/appStudio/frontend/src/App.css')"
     ]
   }
 }
